@@ -103,3 +103,12 @@
 - [x] 5.9 移动端响应式(标签横滑/对话抽屉/窄列收窄)
 - [x] 5.10 全量验证:typecheck/build/接口/桌面+390px 窄屏截图
 - [x] 5.11 回标 9 条 + CHANGELOG + README + commit + push
+
+## 第 5.1 轮:2026-08-15 用户反馈(#13 对话室 Markdown 渲染,闭环中追加、收尾前补读发现)
+
+- [x] 13.1 新增 marked + dompurify 依赖(commit 说明理由:XSS 防护)
+- [x] 13.2 对话气泡 Markdown 渲染(用户/助手消息),漫画风 .md-body 样式
+- [x] 13.3 「Markdown」开关(默认开、localStorage 记忆)
+- [x] 13.4 实测:渲染态(列表/行内代码/代码块/表格)+ 原文态切换正常
+- [x] 13.5 feedback-loop.md 补充"回标前重读反馈文件"规则,防再漏
+- [x] 13.6 回标 + CHANGELOG + README + commit + push

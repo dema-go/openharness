@@ -7,6 +7,7 @@ import type {
 } from '@openharness/core';
 import { AGENT_DISPLAY } from '@openharness/core';
 import { api } from '../lib/api';
+import { renderMarkdown } from '../lib/markdown';
 import { AGENT_CHARACTER, AgentAvatar, Squiggle } from './ComicIcons';
 
 const NO_RESUME_AGENTS: AgentId[] = ['dsh'];
@@ -36,6 +37,13 @@ export function ConversationPanel(props: {
   const [agent, setAgent] = useState<AgentId>('claude');
   const [cwd, setCwd] = useState(projectDirs[0] ?? '');
   const [input, setInput] = useState('');
+  const [mdRender, setMdRender] = useState(() => {
+    try {
+      return localStorage.getItem('oh-md-render') !== '0';
+    } catch {
+      return true;
+    }
+  });
   const [bypass, setBypass] = useState(() => {
     try {
       return localStorage.getItem('oh-bypass-permissions') === '1';
@@ -318,6 +326,22 @@ export function ConversationPanel(props: {
           <h2 className="font-display text-[15px] text-ink">对话室</h2>
           {active && <span className="min-w-0 truncate font-mono text-[11px] text-faint">{active.title}</span>}
           <div className="ml-auto flex items-center gap-2">
+            <label className="flex cursor-pointer items-center gap-1" title="自动渲染 Agent 回复中的 Markdown">
+              <input
+                type="checkbox"
+                checked={mdRender}
+                onChange={(e) => {
+                  setMdRender(e.target.checked);
+                  try {
+                    localStorage.setItem('oh-md-render', e.target.checked ? '1' : '0');
+                  } catch {
+                    /* 忽略 */
+                  }
+                }}
+                className="h-3.5 w-3.5 accent-red"
+              />
+              <span className="font-mono text-[10px] text-dim">Markdown</span>
+            </label>
             {running && (
               <span className="sticker bg-red text-white">
                 {AGENT_CHARACTER[running.agent].name} 干活中…
@@ -348,7 +372,7 @@ export function ConversationPanel(props: {
             ) : (
               <ul className="space-y-2.5">
                 {msgs.map((m) => (
-                  <MessageBubble key={m.seq} m={m} />
+                  <MessageBubble key={m.seq} m={m} mdRender={mdRender} />
                 ))}
                 {sending && (
                   <li className="flex items-center gap-2">
@@ -470,8 +494,8 @@ export function ConversationPanel(props: {
   );
 }
 
-function MessageBubble(props: { m: ConversationMessage }): React.JSX.Element {
-  const { m } = props;
+function MessageBubble(props: { m: ConversationMessage; mdRender: boolean }): React.JSX.Element {
+  const { m, mdRender } = props;
   if (m.role === 'system' || m.role === 'task') {
     return (
       <li className="flex justify-center">
@@ -481,11 +505,19 @@ function MessageBubble(props: { m: ConversationMessage }): React.JSX.Element {
       </li>
     );
   }
+  const body = mdRender ? (
+    <div
+      className="md-body mt-0.5 text-[13px] leading-relaxed text-ink"
+      dangerouslySetInnerHTML={{ __html: renderMarkdown(m.content) }}
+    />
+  ) : (
+    <p className="mt-0.5 whitespace-pre-wrap break-words text-[13px] leading-relaxed text-ink">{m.content}</p>
+  );
   if (m.role === 'user') {
     return (
       <li className="flex justify-end">
-        <div className="max-w-[78%] rounded-xl rounded-br-sm border-[3px] border-ink bg-yellow px-3 py-2">
-          <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-ink">{m.content}</p>
+        <div className="min-w-0 max-w-[78%] rounded-xl rounded-br-sm border-[3px] border-ink bg-yellow px-3 py-2">
+          {body}
           <p className="mt-1 text-right font-mono text-[9px] text-faint">{fmtTime(m.createdAt)}</p>
         </div>
       </li>
@@ -500,7 +532,7 @@ function MessageBubble(props: { m: ConversationMessage }): React.JSX.Element {
           {AGENT_CHARACTER[agent].name}
           <span className="ml-1.5 font-mono text-[8.5px] text-faint">({AGENT_DISPLAY[agent]})</span>
         </p>
-        <p className="mt-0.5 whitespace-pre-wrap break-words text-[13px] leading-relaxed text-ink">{m.content}</p>
+        {body}
         <p className="mt-1 text-right font-mono text-[9px] text-faint">{fmtTime(m.createdAt)}</p>
       </div>
     </li>

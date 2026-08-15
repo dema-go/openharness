@@ -2,7 +2,7 @@
 
 > **个人 Agent 控制台** —— 一个页面,管理、操作、监控你的所有 AI 编程 Agent(Cursor · Claude Code · Codex · DeepSeek Harness),保留每个工具的原生特色。
 > 视觉:《阿衰》式彩色漫画风,由 Open Design × DeepSeek Harness 设计生成([设计文档](docs/DESIGN.md))。
-> 当前版本:**v0.3.4**(变更记录见 [CHANGELOG](CHANGELOG.md))。
+> 当前版本:**v0.4.0**(变更记录见 [CHANGELOG](CHANGELOG.md))。
 
 ![控制台首页](docs/screenshots/cartoon-home.png)
 
@@ -52,7 +52,7 @@
 | 打断/移除 | 进程组 SIGINT,状态正确归因(stopped vs error) | ✅ |
 | 会话索引 | 4 工具会话统一索引(分页/全量搜索/时间线/统计;cursor 接入搜索库全文轨迹;空会话默认归档) | ✅ |
 | 深链恢复 | `claude --resume` / `codex resume` / `cursor agent --resume` / `dsh --profile tui --resume`,一键复制或**直接在终端打开** | ✅ |
-| 对话室 | 会话式连续问答:聊天气泡 + 原生 resume 续接上下文(claude/codex/cursor)+ dsh 摘要注入兜底;**同一对话内可切换 Agent**(注入最近对话摘要),历史会话一键续聊 | ✅ |
+| 对话室 | 会话式连续问答:聊天气泡(Markdown 渲染可开关)+ 原生 resume 续接上下文(claude/codex/cursor)+ dsh 摘要注入兜底;**同一对话内可切换 Agent**(注入最近对话摘要),历史会话一键续聊,记住每个会话的特工与目录 | ✅ |
 | 智能建议 | 关键词 × 工具特色矩阵评分,推荐 + 理由,人做决定 | ✅ |
 | 用量统计 | 总量 / 按工具 / 按模型 / 按天 / 按项目,范围可选(7/14/30/90 天/全部/自定义起止),含数据完整性标注 | ✅ |
 | 配置编辑 | 四工具配置直接编辑(api key / baseUrl / 模型等),写回原配置文件,密钥不回显 | ✅ |

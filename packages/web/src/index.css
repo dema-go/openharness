@@ -214,3 +214,85 @@
     animation: none;
   }
 }
+
+/* ---- Markdown 渲染(对话气泡) ---- */
+.md-body {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.md-body h1,
+.md-body h2,
+.md-body h3,
+.md-body h4 {
+  font-family: var(--font-display), "ZCOOL KuaiLe", sans-serif;
+  margin: 0.6em 0 0.3em;
+  line-height: 1.25;
+  color: #221d15;
+}
+.md-body h1 { font-size: 1.15rem; }
+.md-body h2 { font-size: 1.05rem; border-bottom: 2px dashed rgba(34, 29, 21, 0.35); padding-bottom: 0.15em; }
+.md-body h3 { font-size: 0.98rem; }
+.md-body h4 { font-size: 0.92rem; }
+.md-body p { margin: 0.35em 0; }
+.md-body ul,
+.md-body ol { margin: 0.35em 0; padding-left: 1.4em; }
+.md-body ul { list-style: disc; }
+.md-body ol { list-style: decimal; }
+.md-body li { margin: 0.15em 0; }
+.md-body code {
+  font-family: var(--font-mono), "IBM Plex Mono", monospace;
+  font-size: 0.85em;
+  background: #f3efe4;
+  border: 1.5px solid rgba(34, 29, 21, 0.55);
+  border-radius: 4px;
+  padding: 0.05em 0.35em;
+}
+.md-body pre {
+  background: #f3efe4;
+  border: 2px solid #221d15;
+  border-radius: 8px;
+  padding: 0.6em 0.8em;
+  margin: 0.5em 0;
+  overflow-x: auto;
+  box-shadow: 2px 2px 0 rgba(34, 29, 21, 0.15);
+}
+.md-body pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 0.82em;
+}
+.md-body blockquote {
+  border-left: 3px solid #221d15;
+  background: #f9f5ea;
+  margin: 0.4em 0;
+  padding: 0.2em 0.7em;
+  color: #5b5548;
+}
+.md-body table {
+  border-collapse: collapse;
+  margin: 0.5em 0;
+  font-size: 0.85em;
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+.md-body th,
+.md-body td {
+  border: 1.5px solid rgba(34, 29, 21, 0.6);
+  padding: 0.25em 0.55em;
+  text-align: left;
+}
+.md-body th { background: #f3efe4; }
+.md-body a {
+  color: #2f6fe4;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.md-body hr {
+  border: none;
+  border-top: 2px dashed rgba(34, 29, 21, 0.4);
+  margin: 0.6em 0;
+}
+.md-body img { max-width: 100%; border-radius: 6px; }
+.md-body strong { color: #221d15; }
