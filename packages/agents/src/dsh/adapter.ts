@@ -37,6 +37,8 @@ export class DshAdapter implements AgentAdapter {
   readonly enabled = true;
 
   private readonly offsets = new Map<string, number>();
+  /** 本适配器发射任务的进程组 id:probe 时排除,避免任务收尾残留进程导致状态卡长期 RUN */
+  private readonly taskGroups = new Set<number>();
 
   constructor(private readonly cursorStore?: CursorStore) {}
 
@@ -109,6 +111,7 @@ export class DshAdapter implements AgentAdapter {
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
+    if (child.pid) this.taskGroups.add(child.pid);
     const id = opts.taskId;
     let settled = false;
     let outBuf = '';
@@ -117,12 +120,26 @@ export class DshAdapter implements AgentAdapter {
     const settle = (exitCode: number | null, state: 'done' | 'error') => {
       if (settled) return;
       settled = true;
+      // 任务收尾后清理残留进程组:CLI 退出但孙进程(agent loop)可能滞留,
+      // 10 秒宽限后仍未退出则 SIGKILL 整组,防止状态卡长期误报 RUN
+      const pgid = child.pid;
+      if (pgid) {
+        setTimeout(() => {
+          try {
+            process.kill(-pgid, 0);
+            process.kill(-pgid, 'SIGKILL');
+          } catch {
+            /* 已退出 */
+          }
+          this.taskGroups.delete(pgid);
+        }, 10_000).unref();
+      }
       const final = outBuf.trim();
       if (final) {
         onEvent({
           ts: Date.now(), agent: 'dsh', projectDir: opts.cwd, sessionId: id,
           kind: 'assistant-message', summary: truncate(final, 400),
-          meta: { taskId: id, conversationId: opts.conversationId },
+          meta: { taskId: id, conversationId: opts.conversationId, fullText: final },
         });
       }
       onEvent({
@@ -174,13 +191,43 @@ export class DshAdapter implements AgentAdapter {
     };
   }
 
-  /** 探测 DSH 任务进程;排除常驻的 `dsh web`(OpenHarness 自身就运行在其中)。 */
+  /** 探测 DSH 任务进程;排除常驻的 `dsh web` 与本适配器任务的残留进程组。 */
   async probe(): Promise<boolean> {
     return new Promise((resolve) => {
       execFile('pgrep', ['-fl', 'dsh'], (err, stdout) => {
         if (err) return resolve(false);
+        // 本适配器任务组的成员(残留中)→ 不算"原生使用"
+        const aliveGroups = [...this.taskGroups].filter((g) => {
+          try {
+            process.kill(-g, 0);
+            return true;
+          } catch {
+            return false;
+          }
+        });
         const lines = (stdout ?? '').split('\n').filter((l) => l.trim());
-        resolve(lines.some((l) => !/\bdsh web\b/.test(l) && /\bdsh\b/.test(l)));
+        // 只在"可执行位置"匹配:命令里出现 /dsh 或 dsh 作为独立词(如 bin/dsh --profile、
+        // dsh --profile tui);排除 JSON 字符串、文件路径等字符串污染
+        const candidates = lines.filter(
+          (l) => !/\bdsh web\b/.test(l) && /(?:^|\s|\/)dsh(?:\s|$)/.test(l),
+        );
+        if (candidates.length === 0) return resolve(false);
+        if (aliveGroups.length === 0) return resolve(true);
+        // 逐行取 pgid,判断是否全部属于自家残留进程组
+        let pending = candidates.length;
+        let external = false;
+        for (const line of candidates) {
+          const pid = Number((line.match(/^\s*(\d+)/) ?? [])[1]);
+          if (!Number.isFinite(pid) || pid <= 0) {
+            if (--pending === 0) resolve(external);
+            continue;
+          }
+          execFile('ps', ['-o', 'pgid=', '-p', String(pid)], (err2, out) => {
+            const pgid = Number((out ?? '').trim().split(/\s+/)[0]);
+            if (!aliveGroups.includes(pgid)) external = true;
+            if (--pending === 0) resolve(external);
+          });
+        }
       });
     });
   }

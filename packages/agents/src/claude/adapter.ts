@@ -211,7 +211,12 @@ export class ClaudeAdapter implements AgentAdapter {
 
   async probe(): Promise<boolean> {
     return new Promise((resolve) => {
-      execFile('pgrep', ['-f', 'claude'], (err) => resolve(!err));
+      // 只在"可执行位置"匹配(如 bin/claude、claude -p),排除 JSON/路径等字符串污染
+      execFile('pgrep', ['-fl', 'claude'], (err, stdout) => {
+        if (err) return resolve(false);
+        const lines = (stdout ?? '').split('\n').filter((l) => l.trim());
+        resolve(lines.some((l) => /(?:^|\s|\/)claude(?:\s|$)/.test(l)));
+      });
     });
   }
 

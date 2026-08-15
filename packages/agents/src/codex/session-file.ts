@@ -67,7 +67,7 @@ export function normalizeRecord(rec: Record<string, unknown>): HarnessEvent[] {
           return text ? [{ ...base, kind: 'user-message', summary: truncate(text) }] : [];
         }
         if (role === 'assistant') {
-          if (text) return [{ ...base, kind: 'assistant-message', summary: truncate(text), usage }];
+          if (text) return [{ ...base, kind: 'assistant-message', summary: truncate(text), usage, meta: { fullText: text } }];
           if (content.some((c) => c.type === 'reasoning')) {
             return [{ ...base, kind: 'assistant-message', summary: '（思考中…）', usage }];
           }
@@ -83,7 +83,8 @@ export function normalizeRecord(rec: Record<string, unknown>): HarnessEvent[] {
         }];
       }
       if (rt === 'agent_message') {
-        return [{ ...base, kind: 'assistant-message', summary: truncate(String(payload.text ?? payload.summary ?? '')) }];
+        const text = String(payload.text ?? payload.summary ?? '');
+        return [{ ...base, kind: 'assistant-message', summary: truncate(text), meta: { fullText: text } }];
       }
       return [];
     }
@@ -95,7 +96,7 @@ export function normalizeRecord(rec: Record<string, unknown>): HarnessEvent[] {
       const it = item.type;
       if (it === 'agent_message') {
         const text = String(item.text ?? '').trim();
-        return text ? [{ ...base, kind: 'assistant-message', summary: truncate(text), usage }] : [];
+        return text ? [{ ...base, kind: 'assistant-message', summary: truncate(text), usage, meta: { fullText: text } }] : [];
       }
       if (it === 'function_call' || it === 'custom_tool_call' || it === 'local_shell_call' || it === 'web_search_call') {
         return [{ ...base, kind: 'tool-call', summary: `调用工具 ${String(item.name ?? it)}`, meta: { tool: item.name } }];

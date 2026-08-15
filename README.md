@@ -2,7 +2,7 @@
 
 > **个人 Agent 控制台** —— 一个页面,管理、操作、监控你的所有 AI 编程 Agent(Cursor · Claude Code · Codex · DeepSeek Harness),保留每个工具的原生特色。
 > 视觉:《阿衰》式彩色漫画风,由 Open Design × DeepSeek Harness 设计生成([设计文档](docs/DESIGN.md))。
-> 当前版本:**v0.3.2**(变更记录见 [CHANGELOG](CHANGELOG.md))。
+> 当前版本:**v0.3.3**(变更记录见 [CHANGELOG](CHANGELOG.md))。
 
 ![控制台首页](docs/screenshots/cartoon-home.png)
 

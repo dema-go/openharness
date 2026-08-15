@@ -150,9 +150,17 @@ async function main(): Promise<void> {
   const probeTimer = setInterval(() => void refreshStatuses(), 30_000);
   probeTimer.unref();
 
-  // 任务状态变化时立即刷新状态卡
+  // 任务状态变化时立即刷新状态卡;收尾时进程可能还在退出中,
+  // 追加延迟刷新让 RUN→待命 收敛(如 dsh 任务残留进程组)
   onMessage((msg) => {
-    if (msg.type === 'task') void refreshStatuses();
+    if (msg.type !== 'task') return;
+    void refreshStatuses();
+    const t = msg.data;
+    if (t.state === 'done' || t.state === 'error' || t.state === 'stopped') {
+      for (const delay of [5000, 15000]) {
+        setTimeout(() => void refreshStatuses(), delay).unref();
+      }
+    }
   });
 
   // ---- HTTP + WS ----

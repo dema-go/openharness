@@ -80,3 +80,12 @@
 - [x] 3.4 顺带修复:chokidar v4 绝对路径 glob 不触发 → 三个适配器 watcher 改根目录监听(合成文件实测实时索引)
 - [x] 3.5 全量验证:typecheck/build/重启/浏览器逐项核验/真实任务
 - [x] 3.6 回标 + CHANGELOG + README + commit + push
+
+## 第 4 轮:2026-08-15 用户反馈(#9 状态卡误报 RUN / #10 答复截断)
+
+- [x] 4.1 复现 #9:probe 的 pgrep 匹配"任意命令行含 dsh"造成字符串污染(连测试脚本里的 "agent":"dsh" 都误判)
+- [x] 4.2 修复:dsh/claude probe 改为"可执行位置"匹配;dsh 任务收尾 10s 后清理残留进程组;任务收尾状态延迟刷新(+5s/+15s)
+- [x] 4.3 复现 #10:助手回复被 truncate(200~400 字),气泡无全文
+- [x] 4.4 修复:四适配器事件 meta 携带 fullText;对话回填优先用全文
+- [x] 4.5 验证:dsh 任务完成→状态卡持续 idle;1091 字回复气泡完整
+- [x] 4.6 回标 + CHANGELOG + README + commit + push

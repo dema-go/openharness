@@ -92,7 +92,7 @@ function normalizeStreamRecord(rec: Record<string, unknown>): HarnessEvent[] {
     const events: HarnessEvent[] = [];
     for (const c of content) {
       if (c.type === 'text' && typeof c.text === 'string' && c.text.trim()) {
-        events.push({ ...base, kind: 'assistant-message', summary: truncate(c.text) });
+        events.push({ ...base, kind: 'assistant-message', summary: truncate(c.text), meta: { fullText: c.text } });
       } else if (c.type === 'tool_use') {
         events.push({ ...base, kind: 'tool-call', summary: `调用工具 ${String(c.name ?? '?')}`, meta: { tool: c.name } });
       }

@@ -159,7 +159,9 @@ export class ConversationManager {
 
     if (e.kind === 'assistant-message') {
       this.taskAssistantSeen.set(taskId, true);
-      this.pushMessage(convId, { agent: e.agent, role: 'assistant', content: e.summary, taskId });
+      // 气泡优先用全文(meta.fullText),活动流仍展示截断摘要
+      const full = typeof e.meta?.fullText === 'string' && e.meta.fullText.trim() ? e.meta.fullText : e.summary;
+      this.pushMessage(convId, { agent: e.agent, role: 'assistant', content: full, taskId });
     } else if (e.kind === 'error') {
       // 任务过程中的错误必须可见,否则"任务完成"却无输出无从解释
       this.pushMessage(convId, { agent: e.agent, role: 'system', content: `⚠️ ${e.summary}`, taskId });

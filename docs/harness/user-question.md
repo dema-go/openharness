@@ -122,11 +122,15 @@
 
 ![image-20260815205657715](/Users/liuziying/Library/Application Support/typora-user-images/image-20260815205657715.png)
 
+> ✅ v0.3.3 交付:根因——状态探测(pgrep)匹配"任意命令行里含单词 dsh"的进程,连脚本里 `"agent":"dsh"` 的字符串都会误判为干活中(字符串污染)。修复为"可执行位置"匹配(bin/dsh、dsh --profile 才计数)+ 任务收尾后 10s 清理残留进程组 + 状态延迟刷新收敛;claude 探测同步收紧。实测:任务完成瞬间起状态卡保持待命,不再误报 RUN。
+
 ## 10. 对话信息不全，特工的答复被截断了
 
 问题现象：见截图
 
 ![image-20260815210438883](/Users/liuziying/Library/Application Support/typora-user-images/image-20260815210438883.png)
+
+> ✅ v0.3.3 交付:根因——各适配器把助手回复截断(200~400 字)后存入事件摘要,对话气泡只能拿到截断版。现在事件 meta 携带 fullText 全文(四个适配器),对话回填优先用全文。实测:1091 字回复气泡完整展示。
 
 <!-- 新反馈按模板追加:
 
