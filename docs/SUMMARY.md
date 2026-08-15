@@ -1,6 +1,6 @@
 # OpenHarness 项目总结(面试向)
 
-> 一段话版本:我为自己的多 Agent 工作流做了一个本地控制台 —— 通过适配器模式把 Cursor、Claude Code、Codex、DeepSeek Harness 四个生产级 Agent 工具接入统一页面,实时监控其会话、经原生 CLI 发射/排队/打断任务、索引 200+ 会话、聚合用量,全程只读原工具数据、密钥脱敏、零数据迁移。TypeScript 全栈,11 轮迭代、12 个 commit,每轮端到端实测。
+> 一段话版本:我为自己的多 Agent 工作流做了一个本地控制台 —— 通过适配器模式把 Cursor、Claude Code、Codex、DeepSeek Harness 四个生产级 Agent 工具接入统一页面,实时监控其会话、经原生 CLI 发射/排队/打断任务、索引 200+ 会话、聚合用量,全程只读原工具数据、密钥脱敏、零数据迁移。TypeScript 全栈,11 轮迭代、11 个 commit,每轮端到端实测。
 
 ## 1. 背景与问题
 
