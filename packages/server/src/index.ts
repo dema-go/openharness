@@ -9,7 +9,7 @@ import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import type { AgentAdapter, AgentId, AgentStatus, HarnessEvent } from '@openharness/core';
 import { AGENT_DISPLAY, AGENT_IDS } from '@openharness/core';
-import { ClaudeAdapter } from '@openharness/agents';
+import { ClaudeAdapter, CodexAdapter } from '@openharness/agents';
 import { broadcast, onMessage } from './bus.js';
 import { createApp } from './routes.js';
 import { Store } from './store.js';
@@ -32,10 +32,11 @@ async function main(): Promise<void> {
     broadcast({ type: 'event', data: e });
   };
 
-  // 适配器注册表(v0.1 仅 Claude Code;其余显示为未接入)
+  // 适配器注册表(cursor/dsh 适配器未实现,显示为未接入)
   const adapters = new Map<AgentId, AgentAdapter>();
   adapters.set('claude', new ClaudeAdapter(store));
-  const enabledAgents = new Set<AgentId>(['claude']);
+  adapters.set('codex', new CodexAdapter(store));
+  const enabledAgents = new Set<AgentId>([...adapters.keys()]);
 
   // ---- 状态缓存与轮询 ----
   let statuses: AgentStatus[] = AGENT_IDS.map((agent) => disabledStatus(agent));
@@ -67,7 +68,7 @@ async function main(): Promise<void> {
       agent,
       state: 'disabled',
       enabled: false,
-      disabledReason: `${AGENT_DISPLAY[agent]} 适配器尚未接入(v0.1 仅 Claude Code)`,
+      disabledReason: `${AGENT_DISPLAY[agent]} 适配器尚未接入`,
       activeTasks: 0,
       sessionsCount: 0,
     };
@@ -84,20 +85,22 @@ async function main(): Promise<void> {
   );
 
   // ---- 启动索引 + 实时监听 ----
-  console.log('[openharness] 开始索引 Claude Code 会话…');
-  const claude = adapters.get('claude')!;
-  await claude.indexEvents({
-    onEvent: pipeline,
-    onSummary: (s) => {
-      try {
-        store.upsertSession(s);
-      } catch (err) {
-        console.error('[pipeline] 会话汇总入库失败:', err);
-      }
-    },
-  });
-  const stopWatch = await claude.watch(pipeline);
-  console.log('[openharness] 索引完成,已开始实时监听。');
+  const stopWatches: Array<() => Promise<void>> = [];
+  for (const adapter of adapters.values()) {
+    console.log(`[openharness] 开始索引 ${adapter.displayName} 会话…`);
+    await adapter.indexEvents({
+      onEvent: pipeline,
+      onSummary: (s) => {
+        try {
+          store.upsertSession(s);
+        } catch (err) {
+          console.error('[pipeline] 会话汇总入库失败:', err);
+        }
+      },
+    });
+    stopWatches.push(await adapter.watch(pipeline));
+    console.log(`[openharness] ${adapter.displayName} 索引完成(${store.sessionsCount(adapter.agentId)} 个会话)。`);
+  }
 
   await refreshStatuses();
   const probeTimer = setInterval(() => void refreshStatuses(), 30_000);
@@ -132,7 +135,7 @@ async function main(): Promise<void> {
   const shutdown = async () => {
     console.log('[openharness] 关闭中…');
     clearInterval(probeTimer);
-    await stopWatch();
+    await Promise.all(stopWatches.map((f) => f()));
     store.close();
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 2000).unref();

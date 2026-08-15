@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { AgentId, AgentStatus, HarnessEvent, TaskInfo } from '@openharness/core';
+import type { AgentId, AgentStatus, HarnessEvent, SessionSummary, TaskInfo } from '@openharness/core';
 import { AGENT_DISPLAY } from '@openharness/core';
 import { ActivityFeed } from './components/ActivityFeed';
 import { AgentCard } from './components/AgentCard';
 import { Launcher } from './components/Launcher';
+import { SessionsPanel } from './components/SessionsPanel';
 import { TopBar } from './components/TopBar';
 import { api } from './lib/api';
 import { useBus } from './lib/useBus';
@@ -15,26 +16,33 @@ export function App(): React.JSX.Element {
   const [statuses, setStatuses] = useState<AgentStatus[]>([]);
   const [events, setEvents] = useState<HarnessEvent[]>([]);
   const [tasks, setTasks] = useState<TaskInfo[]>([]);
+  const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [projectDirs, setProjectDirs] = useState<string[]>([]);
   const [filter, setFilter] = useState<AgentId | 'all'>('all');
   const [paused, setPaused] = useState(false);
   const [launcherOpen, setLauncherOpen] = useState(false);
+  const [tab, setTab] = useState<'feed' | 'sessions'>('feed');
   const [clock, setClock] = useState('');
   const pulses = useRef<Record<string, number>>({});
+
+  const refreshSessions = useCallback(() => {
+    void api
+      .sessions()
+      .then((s) => {
+        setSessions(s);
+        const dirs = [...new Set(s.map((x) => x.projectDir).filter(Boolean))] as string[];
+        setProjectDirs(dirs.slice(0, 12));
+      })
+      .catch(() => undefined);
+  }, []);
 
   // 初始数据
   useEffect(() => {
     void api.agents().then(setStatuses).catch(() => undefined);
     void api.events({ limit: 100 }).then(setEvents).catch(() => undefined);
     void api.tasks().then(setTasks).catch(() => undefined);
-    void api
-      .sessions()
-      .then((s) => {
-        const dirs = [...new Set(s.map((x) => x.projectDir).filter(Boolean))] as string[];
-        setProjectDirs(dirs.slice(0, 12));
-      })
-      .catch(() => undefined);
-  }, []);
+    refreshSessions();
+  }, [refreshSessions]);
 
   // 时钟
   useEffect(() => {
@@ -60,7 +68,8 @@ export function App(): React.JSX.Element {
       const rest = prev.filter((x) => x.id !== t.id);
       return [t, ...rest];
     });
-  }, []);
+    if (t.state !== 'running') refreshSessions();
+  }, [refreshSessions]);
 
   const onStatus = useCallback((s: AgentStatus[]) => setStatuses(s), []);
   const connected = useBus({ onEvent, onStatus, onTask });
@@ -103,13 +112,37 @@ export function App(): React.JSX.Element {
         </aside>
 
         <main className="flex min-w-0 flex-1 flex-col">
-          <ActivityFeed
-            events={events}
-            filter={filter}
-            onFilter={setFilter}
-            paused={paused}
-            onTogglePause={() => setPaused((p) => !p)}
-          />
+          <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line px-4">
+            <button
+              type="button"
+              onClick={() => setTab('feed')}
+              className={`rounded-sm px-2.5 py-1 font-display text-[13px] transition-colors ${
+                tab === 'feed' ? 'bg-panel2 text-paper' : 'text-faint hover:text-dim'
+              }`}
+            >
+              活动流
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab('sessions')}
+              className={`rounded-sm px-2.5 py-1 font-display text-[13px] transition-colors ${
+                tab === 'sessions' ? 'bg-panel2 text-paper' : 'text-faint hover:text-dim'
+              }`}
+            >
+              会话索引
+            </button>
+          </div>
+          {tab === 'feed' ? (
+            <ActivityFeed
+              events={events}
+              filter={filter}
+              onFilter={setFilter}
+              paused={paused}
+              onTogglePause={() => setPaused((p) => !p)}
+            />
+          ) : (
+            <SessionsPanel sessions={sessions} />
+          )}
         </main>
       </div>
 

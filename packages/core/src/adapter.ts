@@ -40,7 +40,7 @@ export interface AgentAdapter {
   /**
    * 开始监听会话目录,新增记录实时回调。返回停止函数。
    */
-  watch(onEvent: (e: HarnessEvent) => void): Promise<() => void>;
+  watch(onEvent: (e: HarnessEvent) => void): Promise<() => Promise<void>>;
 
   /** 通过原生 CLI 启动一个任务;事件实时回调。 */
   launch(opts: LaunchOptions, onEvent: (e: HarnessEvent) => void): Promise<TaskHandle>;

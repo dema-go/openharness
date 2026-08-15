@@ -38,11 +38,13 @@ export function createApp(deps: AppDeps): { app: Hono; nodeWs: NodeWebSocket } {
 
   app.get('/api/events', (c) => {
     const agent = c.req.query('agent');
+    const session = c.req.query('session');
     const sinceSeq = c.req.query('sinceSeq');
     const limit = Number(c.req.query('limit') ?? 100);
     return c.json(
       store.events({
         agent,
+        session,
         limit: Number.isFinite(limit) ? limit : 100,
         sinceSeq: sinceSeq ? Number(sinceSeq) : undefined,
       }),
@@ -55,7 +57,7 @@ export function createApp(deps: AppDeps): { app: Hono; nodeWs: NodeWebSocket } {
     const body = await c.req.json<{ agent?: string; cwd?: string; prompt?: string; model?: string }>();
     const agent = body.agent as TaskInfo['agent'] | undefined;
     if (!agent || !AGENT_DISPLAY[agent]) return c.json({ error: '未知的 Agent' }, 400);
-    if (!enabledAgents.has(agent)) return c.json({ error: `${AGENT_DISPLAY[agent]} 适配器尚未接入(v0.1 仅 Claude Code)` }, 400);
+    if (!enabledAgents.has(agent)) return c.json({ error: `${AGENT_DISPLAY[agent]} 适配器尚未接入` }, 400);
     if (!body.cwd || !body.prompt?.trim()) return c.json({ error: 'cwd 与 prompt 为必填' }, 400);
     if (!existsSync(body.cwd) || !statSync(body.cwd).isDirectory()) {
       return c.json({ error: `目录不存在:${body.cwd}` }, 400);

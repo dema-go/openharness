@@ -1,8 +1,9 @@
 /**
- * ClaudeAdapter:Claude Code 的 OpenHarness 接入层。
- * - 索引/监听 ~/.claude/projects 下会话 JSONL(游标增量续读)
- * - 经 `claude -p --output-format stream-json` 发射任务并流式归一化
- * - 打断 = 进程组 SIGINT;深链 = `claude --resume <sessionId>`
+ * CodexAdapter:OpenAI Codex CLI 的 OpenHarness 接入层。
+ * - 索引/监听 ~/.codex/sessions 下 rollout JSONL(游标增量续读)
+ * - 经 `codex exec --json` 发射任务并流式归一化
+ * - 打断 = 进程组 SIGINT;深链 = `codex resume <sessionId>`
+ * - probe 排除 ChatGPT 桌面 App 的常驻 codex 进程,只认 CLI 任务进程
  */
 import { spawn, execFile } from 'node:child_process';
 import os from 'node:os';
@@ -18,29 +19,26 @@ import {
   type LaunchOptions,
   type SessionSummary,
   type TaskHandle,
-  truncate,
 } from '@openharness/core';
 import { listSessionFiles, normalizeRecord, parseSessionFile, type ParseResult } from './session-file.js';
 
-export const CLAUDE_SESSIONS_ROOT = path.join(os.homedir(), '.claude', 'projects');
+export const CODEX_SESSIONS_ROOT = path.join(os.homedir(), '.codex', 'sessions');
 
-export class ClaudeAdapter implements AgentAdapter {
-  readonly agentId = 'claude' as const;
-  readonly displayName = 'Claude Code';
+export class CodexAdapter implements AgentAdapter {
+  readonly agentId = 'codex' as const;
+  readonly displayName = 'Codex';
   readonly enabled = true;
 
-  /** 会话文件 → 已消费字节偏移(游标,持久化由 CursorStore 承担) */
   private readonly offsets = new Map<string, number>();
 
   constructor(private readonly cursorStore?: CursorStore) {}
 
   async listSessions(): Promise<SessionSummary[]> {
-    const files = await listSessionFiles(CLAUDE_SESSIONS_ROOT);
+    const files = await listSessionFiles(CODEX_SESSIONS_ROOT);
     const out: SessionSummary[] = [];
     for (const f of files) {
       try {
-        const r = await parseSessionFile(f.filePath);
-        out.push(this.toSummary(r));
+        out.push(this.toSummary(await parseSessionFile(f)));
       } catch {
         // 单个文件损坏不阻塞整体索引
       }
@@ -49,13 +47,13 @@ export class ClaudeAdapter implements AgentAdapter {
   }
 
   async indexEvents(handlers: IndexHandlers): Promise<void> {
-    const files = await listSessionFiles(CLAUDE_SESSIONS_ROOT);
+    const files = await listSessionFiles(CODEX_SESSIONS_ROOT);
     for (const f of files) {
       try {
-        const start = this.cursorStore?.get(f.filePath) ?? this.offsets.get(f.filePath) ?? 0;
-        const r = await parseSessionFile(f.filePath, { offset: start, onEvent: handlers.onEvent });
-        this.offsets.set(f.filePath, r.offset);
-        this.cursorStore?.set(f.filePath, r.offset);
+        const start = this.cursorStore?.get(f) ?? this.offsets.get(f) ?? 0;
+        const r = await parseSessionFile(f, { offset: start, onEvent: handlers.onEvent });
+        this.offsets.set(f, r.offset);
+        this.cursorStore?.set(f, r.offset);
         handlers.onSummary(this.toSummary(r));
       } catch {
         // 跳过损坏文件
@@ -64,9 +62,8 @@ export class ClaudeAdapter implements AgentAdapter {
   }
 
   async watch(onEvent: (e: HarnessEvent) => void): Promise<() => Promise<void>> {
-    const watcher: FSWatcher = chokidar.watch(path.join(CLAUDE_SESSIONS_ROOT, '*.jsonl'), {
+    const watcher: FSWatcher = chokidar.watch(path.join(CODEX_SESSIONS_ROOT, '**', '*.jsonl'), {
       ignoreInitial: true,
-      depth: 1,
       awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 },
     });
 
@@ -76,7 +73,7 @@ export class ClaudeAdapter implements AgentAdapter {
       busy = true;
       try {
         const start = this.offsets.get(filePath) ?? 0;
-        const r: ParseResult = await parseSessionFile(filePath, { offset: start, onEvent });
+        const r = await parseSessionFile(filePath, { offset: start, onEvent });
         this.offsets.set(filePath, r.offset);
       } catch {
         // 文件可能尚在写入,下轮 change 再试
@@ -94,11 +91,11 @@ export class ClaudeAdapter implements AgentAdapter {
   }
 
   async launch(opts: LaunchOptions, onEvent: (e: HarnessEvent) => void): Promise<TaskHandle> {
-    const child = spawn(
-      'claude',
-      ['-p', opts.prompt, '--output-format', 'stream-json', '--verbose', ...(opts.model ? ['--model', opts.model] : [])],
-      { cwd: opts.cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'] },
-    );
+    const child = spawn('codex', ['exec', '--json', ...(opts.model ? ['-m', opts.model] : []), opts.prompt], {
+      cwd: opts.cwd,
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
     const id = opts.taskId;
     let sessionId: string | null = null;
     let settled = false;
@@ -108,7 +105,7 @@ export class ClaudeAdapter implements AgentAdapter {
       settled = true;
       onEvent({
         ts: Date.now(),
-        agent: 'claude',
+        agent: 'codex',
         projectDir: opts.cwd,
         sessionId: sessionId ?? id,
         kind: 'task-end',
@@ -119,7 +116,7 @@ export class ClaudeAdapter implements AgentAdapter {
 
     child.on('error', (err) => {
       onEvent({
-        ts: Date.now(), agent: 'claude', projectDir: opts.cwd, sessionId: sessionId ?? id,
+        ts: Date.now(), agent: 'codex', projectDir: opts.cwd, sessionId: sessionId ?? id,
         kind: 'error', summary: `启动失败:${err.message}`, meta: { taskId: id },
       });
       settle(null, 'error');
@@ -134,16 +131,10 @@ export class ClaudeAdapter implements AgentAdapter {
       } catch {
         return;
       }
-      if (rec.type === 'system' && rec.subtype === 'init') {
-        sessionId = (rec.session_id as string) ?? sessionId;
-        onEvent({
-          ts: Date.now(), agent: 'claude', projectDir: opts.cwd, sessionId: sessionId!,
-          kind: 'session-start', summary: `任务会话开始(${String(rec.model ?? '模型')})`,
-          meta: { taskId: id, model: rec.model, cwd: rec.cwd },
-        });
-        return;
+      const payload = (rec.payload ?? {}) as Record<string, unknown>;
+      if (rec.type === 'session_meta' && payload.session_id) {
+        sessionId = payload.session_id as string;
       }
-      // stream-json 的消息体结构与 jsonl 一致,直接复用归一化器
       for (const e of normalizeRecord(rec)) {
         if (e.kind === 'user-message') continue; // 工具结果回显太噪,略过
         onEvent({ ...e, sessionId: sessionId ?? e.sessionId, meta: { ...e.meta, taskId: id } });
@@ -178,14 +169,27 @@ export class ClaudeAdapter implements AgentAdapter {
     };
   }
 
+  /**
+   * 探测 Codex CLI 任务进程。
+   * 只认进程名恰为 codex 的 CLI 会话(app-server / code-mode-host 等桌面常驻排除)。
+   */
   async probe(): Promise<boolean> {
     return new Promise((resolve) => {
-      execFile('pgrep', ['-f', 'claude'], (err) => resolve(!err));
+      execFile('pgrep', ['-x', 'codex'], (err, stdout) => {
+        if (err) return resolve(false);
+        const pids = (stdout ?? '').split('\n').filter(Boolean);
+        if (pids.length === 0) return resolve(false);
+        execFile('ps', ['-o', 'args=', '-p', pids.join(',')], (err2, out) => {
+          if (err2) return resolve(false);
+          const lines = (out ?? '').split('\n').filter((l) => l.trim());
+          resolve(lines.some((l) => !/app-server|code-mode-host/.test(l)));
+        });
+      });
     });
   }
 
   resumeCommand(sessionId: string): string {
-    return `claude --resume ${sessionId}`;
+    return `codex resume ${sessionId}`;
   }
 
   describeStatus(extra: Pick<AgentStatus, 'activeTasks' | 'sessionsCount'>): AgentStatus {

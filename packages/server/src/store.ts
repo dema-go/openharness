@@ -122,13 +122,17 @@ export class Store implements CursorStore {
     return Number(info.lastInsertRowid);
   }
 
-  events(opts: { limit?: number; agent?: string; sinceSeq?: number } = {}): HarnessEvent[] {
-    const { limit = 100, agent, sinceSeq } = opts;
+  events(opts: { limit?: number; agent?: string; session?: string; sinceSeq?: number } = {}): HarnessEvent[] {
+    const { limit = 100, agent, session, sinceSeq } = opts;
     const clauses: string[] = [];
     const params: Array<string | number> = [];
     if (agent) {
       clauses.push('agent = ?');
       params.push(agent);
+    }
+    if (session) {
+      clauses.push('session_id = ?');
+      params.push(session);
     }
     if (sinceSeq !== undefined) {
       clauses.push('seq > ?');

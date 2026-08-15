@@ -14,9 +14,10 @@ async function j<T>(url: string, init?: RequestInit): Promise<T> {
 export const api = {
   agents: () => j<AgentStatus[]>('/agents'),
   sessions: (agent?: string) => j<SessionSummary[]>(`/sessions${agent ? `?agent=${agent}` : ''}`),
-  events: (opts: { agent?: string; sinceSeq?: number; limit?: number } = {}) => {
+  events: (opts: { agent?: string; session?: string; sinceSeq?: number; limit?: number } = {}) => {
     const p = new URLSearchParams();
     if (opts.agent) p.set('agent', opts.agent);
+    if (opts.session) p.set('session', opts.session);
     if (opts.sinceSeq !== undefined) p.set('sinceSeq', String(opts.sinceSeq));
     if (opts.limit !== undefined) p.set('limit', String(opts.limit));
     const q = p.toString();

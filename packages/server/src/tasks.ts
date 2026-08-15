@@ -10,6 +10,7 @@ import { broadcast } from './bus.js';
 interface ManagedTask {
   info: TaskInfo;
   handle: TaskHandle;
+  requestStop: () => void;
 }
 
 const MAX_KEPT = 50;
@@ -33,6 +34,7 @@ export class TaskManager {
       state: 'running',
       startedAt: Date.now(),
     };
+    let stopRequested = false;
 
     this.pipeline({
       ts: Date.now(),
@@ -48,7 +50,8 @@ export class TaskManager {
       if (e.meta?.taskId === id) {
         if (e.kind === 'session-start') info.sessionId = e.sessionId;
         if (e.kind === 'task-end') {
-          info.state = e.meta?.state === 'done' ? 'done' : 'error';
+          // 用户主动打断时 exit≠0 也归为 stopped,而非 error
+          info.state = stopRequested ? 'stopped' : e.meta?.state === 'done' ? 'done' : 'error';
           info.endedAt = Date.now();
           info.exitCode = (e.meta?.exitCode as number | null) ?? null;
           this.broadcastTask(info);
@@ -57,7 +60,7 @@ export class TaskManager {
       this.pipeline(e);
     });
 
-    this.tasks.set(id, { info, handle });
+    this.tasks.set(id, { info, handle, requestStop: () => (stopRequested = true) });
     this.evict();
     this.broadcastTask(info);
     return info;
@@ -66,6 +69,7 @@ export class TaskManager {
   async stop(id: string): Promise<TaskInfo | null> {
     const t = this.tasks.get(id);
     if (!t || t.info.state !== 'running') return t?.info ?? null;
+    t.requestStop();
     await t.handle.stop();
     if (t.info.state === 'running') {
       t.info.state = 'stopped';
