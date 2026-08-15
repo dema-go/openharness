@@ -1,6 +1,6 @@
 # OpenHarness — 愿景与需求讨论稿
 
-> 状态:讨论中(第 1 轮) · 2025-08 启动
+> 状态:讨论中(第 1 轮) · 2026-08 启动
 > 本文件是需求的活文档,每轮讨论后更新,直到愿景收敛为可开工的 PRD。
 
 ## 1. 愿景重述
@@ -16,13 +16,13 @@
 
 一句话:**OpenHarness 是"控制面",各 Agent 是"原生运行时"**——它编排和观察工具本身,而不是替代工具。
 
-## 2. 现状盘点(2025-08 本机实测)
+## 2. 现状盘点(2026-08 本机实测)
 
 | 工具 | 本机形态 | 会话/状态存储 | 可脚本化接口 | 特色(需要保留的价值) |
 |---|---|---|---|---|
 | **Claude Code** | CLI v2.1.233 | `~/.claude.json` + `~/.claude/projects/<路径>/*.jsonl`(7+ 个项目有历史会话) | `claude -p`(headless)、`--resume <session-id>`、`--continue`、hooks、MCP、`/output-style` | hooks、plan mode、subagents、terminal 直控、CLAUDE.md 上下文体系 |
 | **Cursor** | IDE 3.16.17(桌面 App 运行中) | IDE 内工作区状态(`~/Library/Application Support/Cursor`) | ✅ **`cursor agent` 子命令可用**:`--print`、`--output-format json/stream-json`、`--resume [chatId]`、`--continue`、`--mode plan/ask`、`--sandbox`、`--model`、MCP;首次调用自动安装 cursor-agent | Composer、Tab 补全、IDE 深度集成、多模型、Agent 窗口 |
-| **Codex** | ChatGPT 桌面 App + **CLI 0.147.0 已安装**(2025-08-15) | `~/.codex/`(global-state、sessions、archived_sessions;config.toml 已有,sandbox_mode=workspace-write) | ✅ `codex exec`(非交互)、`codex resume/--last`、`fork`、`archive`、**`exec-server`(实验性独立服务)** | sandbox 执行、computer use、rollout、AGENTS.md |
+| **Codex** | ChatGPT 桌面 App + **CLI 0.147.0 已安装**(2026-08-15) | `~/.codex/`(global-state、sessions、archived_sessions;config.toml 已有,sandbox_mode=workspace-write) | ✅ `codex exec`(非交互)、`codex resume/--last`、`fork`、`archive`、**`exec-server`(实验性独立服务)** | sandbox 执行、computer use、rollout、AGENTS.md |
 | **DeepSeek Harness (DSH)** | CLI `dsh`;`dsh web` 正在 127.0.0.1:3080 运行(本会话即跑在其中) | `~/.dsh` profile 体系 | profile/plugin 补丁层、`--profile headless` 单任务模式、MCP | profile 可组合性、插件机制、多 provider、web/tui/headless 三形态 |
 
 **结论**:四个工具都有本地会话数据可读,CLI 化程度不一:
@@ -74,19 +74,9 @@ Cursor 的 IDE 集成、Claude Code 的 hooks/plan、Codex 的 sandbox、DSH 的
 4. **会话详情**:点击任意会话,查看摘要/关键消息,并深链回原工具继续。
 5. **Adapter SDK**:`agents/*` 每个工具一个适配器,提供统一接口 `listSessions / watch / launch / resume / stop / openExternal`。
 
-## 5. MVP 设想(待定稿)
-
-> 以下是最小可行形态的草稿,待上述问题收敛后改写为 PRD。
-
-1. **控制台首页**:每个 Agent 一张卡片——运行状态、最近会话、任务摘要、一键"继续/打开"。
-2. **统一活动流**:聚合各工具的会话事件(启动、消息、工具调用、完成/失败),时间线展示。
-3. **发任务**:选择 Agent + 输入任务 → 调用其原生 CLI 启动(或深链到原工具)。
-4. **会话详情**:点击任意会话,查看摘要/关键消息,并深链回原工具继续。
-5. **Adapter SDK**:`agents/*` 每个工具一个适配器,提供统一接口 `listSessions / watch / launch / resume / stop / openExternal`。
-
 ## 6. 决策记录
 
-### 第 1 轮问答(2025-08-15)— 已确认 ✅
+### 第 1 轮问答(2026-08-15)— 已确认 ✅
 
 | # | 决策点 | 结论 |
 |---|---|---|

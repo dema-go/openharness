@@ -1131,7 +1131,7 @@ textarea.inp{height:118px;resize:vertical;padding:12px;line-height:1.6}
           <h2 class="sec-title">用量统计
             <svg class="squig" aria-hidden="true"><use href="#squig"/></svg>
           </h2>
-          <span class="chip">今日 · 2025-08-15</span>
+          <span class="chip" id="today-chip" aria-label="今日日期">今日</span>
         </div>
 
         <div class="stat-grid">
@@ -1429,12 +1429,14 @@ textarea.inp{height:118px;resize:vertical;padding:12px;line-height:1.6}
 (function(){
   "use strict";
 
-  /* ---------- 时钟 ---------- */
+  /* ---------- 时钟与今日日期 ---------- */
   var clock = document.getElementById("clock");
+  var today = document.getElementById("today-chip");
   function pad(n){return String(n).padStart(2,"0")}
   function tick(){
     var d = new Date();
     clock.textContent = pad(d.getHours())+":"+pad(d.getMinutes())+":"+pad(d.getSeconds());
+    today.textContent = "今日 · " + d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate());
   }
   tick(); setInterval(tick, 1000);
 

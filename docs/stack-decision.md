@@ -1,10 +1,10 @@
 # 技术栈决策:主流是什么?OpenHarness 该选什么?
 
-> 状态:待用户拍板 · 2026-08
+> 状态:✅ 已拍板(2026-08:以 TS 全栈为主体、Python 可选挂载;决策见 [prd.md](./prd.md) 第 7 节)
 
 ## 1. 先回答你的问题:后端都是 Python 吗?
 
-**不是。** 2025 年的真实格局(依据 [Stack Overflow 2025 调查解读](https://dev.to/dev_tips/my-thoughts-on-the-2025-stack-overflow-survey-the-hype-the-reality-the-gap-26e3) 与 [2026 Web 技术栈分析](https://insoftex.com/insights/top-technology-stacks-for-web-app-development/)):
+**不是。** 2026 年的真实格局(依据 [Stack Overflow 2025 调查解读](https://dev.to/dev_tips/my-thoughts-on-the-2025-stack-overflow-survey-the-hype-the-reality-the-gap-26e3) 与 [2026 Web 技术栈分析](https://insoftex.com/insights/top-technology-stacks-for-web-app-development/)):
 
 | 领域 | 主流后端 | Python 的位置 |
 |---|---|---|

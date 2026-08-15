@@ -1,6 +1,6 @@
 # OpenHarness PRD(产品需求文档)
 
-> 状态:✅ 已确认 v1(2025-08:范围、技术栈均已拍板)
+> 状态:✅ 已确认 v1(2026-08:范围、技术栈均已拍板)
 > 上游:[vision-discussion.md](./vision-discussion.md)
 
 ## 1. 产品定义

@@ -1,6 +1,6 @@
 # OpenHarness 架构设计
 
-> 状态:✅ 已确认 v1(2025-08,用户拍板技术栈与范围;配套 [prd.md](./prd.md)、[stack-decision.md](./stack-decision.md))
+> 状态:✅ 已确认 v1(2026-08,用户拍板技术栈与范围;配套 [prd.md](./prd.md)、[stack-decision.md](./stack-decision.md))
 
 ## 1. 设计原则
 
