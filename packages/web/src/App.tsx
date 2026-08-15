@@ -6,6 +6,7 @@ import { AgentCard } from './components/AgentCard';
 import { Launcher } from './components/Launcher';
 import { SessionsPanel } from './components/SessionsPanel';
 import { TopBar } from './components/TopBar';
+import { UsagePanel } from './components/UsagePanel';
 import { api } from './lib/api';
 import { useBus } from './lib/useBus';
 
@@ -21,7 +22,7 @@ export function App(): React.JSX.Element {
   const [filter, setFilter] = useState<AgentId | 'all'>('all');
   const [paused, setPaused] = useState(false);
   const [launcherOpen, setLauncherOpen] = useState(false);
-  const [tab, setTab] = useState<'feed' | 'sessions'>('feed');
+  const [tab, setTab] = useState<'feed' | 'sessions' | 'usage'>('feed');
   const [clock, setClock] = useState('');
   const pulses = useRef<Record<string, number>>({});
 
@@ -131,6 +132,15 @@ export function App(): React.JSX.Element {
             >
               会话索引
             </button>
+            <button
+              type="button"
+              onClick={() => setTab('usage')}
+              className={`rounded-sm px-2.5 py-1 font-display text-[13px] transition-colors ${
+                tab === 'usage' ? 'bg-panel2 text-paper' : 'text-faint hover:text-dim'
+              }`}
+            >
+              用量
+            </button>
           </div>
           {tab === 'feed' ? (
             <ActivityFeed
@@ -140,8 +150,10 @@ export function App(): React.JSX.Element {
               paused={paused}
               onTogglePause={() => setPaused((p) => !p)}
             />
-          ) : (
+          ) : tab === 'sessions' ? (
             <SessionsPanel sessions={sessions} />
+          ) : (
+            <UsagePanel />
           )}
         </main>
       </div>

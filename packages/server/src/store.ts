@@ -157,7 +157,53 @@ export class Store implements CursorStore {
     }));
   }
 
+  // ---- usage 聚合(F6)----
+  usage(): UsageReport {
+    const total = this.db
+      .prepare('SELECT COALESCE(SUM(input_tokens),0) AS i, COALESCE(SUM(output_tokens),0) AS o FROM events')
+      .get() as { i: number; o: number };
+    const toolCalls = this.db
+      .prepare("SELECT COUNT(*) AS n FROM events WHERE kind = 'tool-call'")
+      .get() as { n: number };
+    const byAgent = (
+      this.db
+        .prepare(
+          'SELECT agent, COALESCE(SUM(input_tokens),0) AS i, COALESCE(SUM(output_tokens),0) AS o FROM events GROUP BY agent ORDER BY i + o DESC',
+        )
+        .all() as Array<{ agent: string; i: number; o: number }>
+    ).map((r) => ({ agent: r.agent as UsageReport['byAgent'][number]['agent'], input: r.i, output: r.o }));
+    const since14d = Date.now() - 14 * 86400_000;
+    const byDay = (
+      this.db
+        .prepare(
+          `SELECT date(ts/1000,'unixepoch','localtime') AS day,
+                  COALESCE(SUM(input_tokens),0) AS i, COALESCE(SUM(output_tokens),0) AS o
+           FROM events WHERE ts >= ? GROUP BY day ORDER BY day ASC`,
+        )
+        .all(since14d) as Array<{ day: string; i: number; o: number }>
+    ).map((r) => ({ day: r.day, input: r.i, output: r.o }));
+    const byProject = (
+      this.db
+        .prepare(
+          `SELECT project_dir AS p, COALESCE(SUM(input_tokens),0) AS i, COALESCE(SUM(output_tokens),0) AS o
+           FROM events WHERE project_dir IS NOT NULL AND project_dir != ''
+           GROUP BY project_dir ORDER BY i + o DESC LIMIT 8`,
+        )
+        .all() as Array<{ p: string; i: number; o: number }>
+    ).map((r) => ({ project: r.p, input: r.i, output: r.o }));
+
+    return { total: { input: total.i, output: total.o }, toolCalls: toolCalls.n, byAgent, byDay, byProject };
+  }
+
   close(): void {
     this.db.close();
   }
+}
+
+export interface UsageReport {
+  total: { input: number; output: number };
+  toolCalls: number;
+  byAgent: Array<{ agent: string; input: number; output: number }>;
+  byDay: Array<{ day: string; input: number; output: number }>;
+  byProject: Array<{ project: string; input: number; output: number }>;
 }

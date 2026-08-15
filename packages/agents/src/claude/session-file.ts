@@ -71,7 +71,7 @@ export function normalizeRecord(rec: Record<string, unknown>): HarnessEvent[] {
       const events: HarnessEvent[] = [];
       for (const c of message?.content ?? []) {
         if (c.type === 'text' && typeof c.text === 'string' && c.text.trim()) {
-          events.push({ ...base, kind: 'assistant-message', summary: truncate(c.text), usage: usageNorm });
+          events.push({ ...base, kind: 'assistant-message', summary: truncate(c.text) });
         } else if (c.type === 'tool_use') {
           events.push({
             ...base,
@@ -83,8 +83,10 @@ export function normalizeRecord(rec: Record<string, unknown>): HarnessEvent[] {
       }
       if (events.length === 0 && (message?.content?.length ?? 0) > 0) {
         // 只有 thinking 块时也保留一条轻量事件,保证时间线连续
-        events.push({ ...base, kind: 'assistant-message', summary: '（思考中…）', usage: usageNorm });
+        events.push({ ...base, kind: 'assistant-message', summary: '（思考中…）' });
       }
+      // usage 是消息级指标,只附在首个事件上,避免求和重复计数
+      if (usageNorm && events.length > 0) events[0] = { ...events[0]!, usage: usageNorm };
       return events;
     }
     case 'mode':

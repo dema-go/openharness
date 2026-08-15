@@ -8,7 +8,9 @@
 - ✅ Codex 适配器:rollout JSONL 索引/监听、`codex exec --json` 发射/打断、`codex resume` 深链
 - ✅ Cursor 适配器:conversation-search.db 会话索引、`cursor-agent` 发射(需先 `cursor-agent login`)、`cursor agent --resume` 深链
 - ✅ DSH 适配器:zstd 会话解析/监听、`dsh --profile headless` 发射、`dsh --profile tui --resume` 深链
-- ✅ 控制台 UI:Agent 状态卡(LED 信号表)、统一活动流(实时推送)、发任务面板(按特色匹配的建议引擎)、会话索引页 + 会话详情抽屉(统计/时间线/恢复命令复制)
+- ✅ 控制台 UI:Agent 状态卡(LED 信号表)、统一活动流(实时推送)、发任务面板(按特色匹配的建议引擎)、会话索引页 + 会话详情抽屉(统计/时间线/恢复命令复制)、用量统计页(总量/按工具/近 14 天/按项目)
+
+> **v0.1 MVP(F1–F6)已全部交付,进入验收。** 服务:`http://127.0.0.1:3900`
 
 ## 快速开始
 

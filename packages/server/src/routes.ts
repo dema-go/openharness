@@ -81,6 +81,8 @@ export function createApp(deps: AppDeps): { app: Hono; nodeWs: NodeWebSocket } {
     const result: Suggestion[] = suggest(prompt, enabledAgents);
     return c.json(result);
   });
+
+  app.get('/api/usage', (c) => c.json(store.usage()));
   const { upgradeWebSocket } = nodeWs;
   const disposers = new WeakMap<WSContext, () => void>();
 

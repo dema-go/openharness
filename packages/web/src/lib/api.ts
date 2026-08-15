@@ -11,6 +11,14 @@ async function j<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export interface UsageReport {
+  total: { input: number; output: number };
+  toolCalls: number;
+  byAgent: Array<{ agent: string; input: number; output: number }>;
+  byDay: Array<{ day: string; input: number; output: number }>;
+  byProject: Array<{ project: string; input: number; output: number }>;
+}
+
 export const api = {
   agents: () => j<AgentStatus[]>('/agents'),
   sessions: (agent?: string) => j<SessionSummary[]>(`/sessions${agent ? `?agent=${agent}` : ''}`),
@@ -35,4 +43,5 @@ export const api = {
     j<Array<{ agent: string; display: string; score: number; reasons: string[]; capability: string; enabled: boolean }>>(
       `/suggest?prompt=${encodeURIComponent(prompt)}`,
     ),
+  usage: () => j<UsageReport>('/usage'),
 };
