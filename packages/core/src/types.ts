@@ -76,12 +76,14 @@ export interface AgentStatus {
   disabledReason?: string;
   /** 由本控制台发起的活动任务数 */
   activeTasks: number;
+  /** 排队等待执行的任务数 */
+  queuedTasks: number;
   /** 已索引会话数 */
   sessionsCount: number;
   lastSeen?: number;
 }
 
-export type TaskState = 'running' | 'stopped' | 'error' | 'done';
+export type TaskState = 'queued' | 'running' | 'stopped' | 'error' | 'done';
 
 export interface TaskInfo {
   id: string;

@@ -194,7 +194,7 @@ export class CodexAdapter implements AgentAdapter {
     return `codex resume ${sessionId}`;
   }
 
-  describeStatus(extra: Pick<AgentStatus, 'activeTasks' | 'sessionsCount'>): AgentStatus {
+  describeStatus(extra: Pick<AgentStatus, 'activeTasks' | 'queuedTasks' | 'sessionsCount'>): AgentStatus {
     return { agent: this.agentId, state: 'idle', enabled: this.enabled, ...extra };
   }
 

@@ -51,6 +51,6 @@ export interface AgentAdapter {
   /** 生成在原生工具中恢复会话的命令(深链)。 */
   resumeCommand(sessionId: string): string;
 
-  /** 汇总为 AgentStatus(由 server 填充 activeTasks 与 sessionsCount)。 */
-  describeStatus(extra: Pick<AgentStatus, 'activeTasks' | 'sessionsCount'>): AgentStatus;
+  /** 汇总为 AgentStatus(由 server 填充 activeTasks / queuedTasks / sessionsCount)。 */
+  describeStatus(extra: Pick<AgentStatus, 'activeTasks' | 'queuedTasks' | 'sessionsCount'>): AgentStatus;
 }

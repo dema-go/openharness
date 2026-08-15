@@ -57,6 +57,7 @@ async function main(): Promise<void> {
         state: running ? 'running' : 'idle',
         enabled: true,
         activeTasks: tasks.activeCount(agent),
+        queuedTasks: tasks.queuedCount(agent),
         sessionsCount: store.sessionsCount(agent),
         lastSeen: lastSeenRow,
       });
@@ -72,6 +73,7 @@ async function main(): Promise<void> {
       enabled: false,
       disabledReason: `${AGENT_DISPLAY[agent]} 适配器尚未接入`,
       activeTasks: 0,
+      queuedTasks: 0,
       sessionsCount: 0,
     };
   }
@@ -81,10 +83,7 @@ async function main(): Promise<void> {
     return events[0]?.ts;
   }
 
-  const tasks = new TaskManager(
-    (agent) => adapters.get(agent),
-    pipeline,
-  );
+  const tasks = new TaskManager(pipeline);
 
   // ---- 启动索引 + 实时监听 ----
   const stopWatches: Array<() => Promise<void>> = [];

@@ -68,6 +68,7 @@ export function AgentCard(props: { status: AgentStatus; pulse: number }): React.
           <dt className="text-faint">任务</dt>
           <dd className={`mt-0.5 tabular-nums ${status.activeTasks > 0 ? 'text-amber' : 'text-dim'}`}>
             {status.activeTasks}
+            {status.queuedTasks > 0 && <span className="text-faint">·排{status.queuedTasks}</span>}
           </dd>
         </div>
         <div>

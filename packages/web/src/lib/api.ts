@@ -32,7 +32,7 @@ export const api = {
     return j<HarnessEvent[]>(`/events${q ? `?${q}` : ''}`);
   },
   tasks: () => j<TaskInfo[]>('/tasks'),
-  startTask: (body: { agent: string; cwd: string; prompt: string; model?: string }) =>
+  startTask: (body: { agent: string; cwd: string; prompt: string; model?: string; queue?: boolean }) =>
     j<TaskInfo>('/tasks', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

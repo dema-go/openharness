@@ -25,6 +25,7 @@ export function Launcher(props: {
   const [agent, setAgent] = useState<AgentId>('claude');
   const [cwd, setCwd] = useState(projectDirs[0] ?? '');
   const [prompt, setPrompt] = useState('');
+  const [queue, setQueue] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +64,12 @@ export function Launcher(props: {
       void Notification.requestPermission();
     }
     try {
-      const t = await api.startTask({ agent, cwd: cwd.trim(), prompt: prompt.trim() });
+      const t = await api.startTask({
+        agent,
+        cwd: cwd.trim(),
+        prompt: prompt.trim(),
+        queue,
+      });
       props.onTask(t);
       setPrompt('');
     } catch (err) {
@@ -197,13 +203,26 @@ export function Launcher(props: {
               </p>
             )}
 
+            <label className="flex cursor-pointer items-center gap-2.5 rounded-sm border border-line px-3 py-2.5">
+              <input
+                type="checkbox"
+                checked={queue}
+                onChange={(e) => setQueue(e.target.checked)}
+                className="h-3.5 w-3.5 accent-amber"
+              />
+              <span className="text-[12px] text-dim">
+                排队执行
+                <span className="ml-1.5 text-faint">该 Agent 忙时排入队列,当前任务收尾后自动接续</span>
+              </span>
+            </label>
+
             <button
               type="button"
               onClick={() => void submit()}
               disabled={busy || enabled.length === 0 || !cwd.trim() || !prompt.trim()}
               className="w-full rounded-sm border border-amber/60 bg-amber/10 px-4 py-2.5 font-display text-[14px] font-500 text-amber transition-colors hover:bg-amber/20 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {busy ? '启动中…' : '启动任务'}
+              {busy ? '启动中…' : queue ? '加入队列' : '启动任务'}
             </button>
 
             {tasks.length > 0 && (
@@ -219,24 +238,35 @@ export function Launcher(props: {
                         className={`inline-block h-2 w-2 shrink-0 rounded-full ${
                           t.state === 'running'
                             ? 'orb-running bg-amber'
-                            : t.state === 'done'
-                              ? 'bg-jade'
-                              : t.state === 'stopped'
-                                ? 'bg-faint'
-                                : 'bg-brick'
+                            : t.state === 'queued'
+                              ? 'bg-faint'
+                              : t.state === 'done'
+                                ? 'bg-jade'
+                                : t.state === 'stopped'
+                                  ? 'bg-faint'
+                                  : 'bg-brick'
                         }`}
                       />
                       <span className="min-w-0 flex-1 truncate text-[12px] text-dim">{t.prompt}</span>
                       <span className="shrink-0 font-mono text-[10px] text-faint">
-                        {AGENT_DISPLAY[t.agent]} · {t.state}
+                        {AGENT_DISPLAY[t.agent]} ·{' '}
+                        {t.state === 'running'
+                          ? '运行中'
+                          : t.state === 'queued'
+                            ? '排队中'
+                            : t.state === 'done'
+                              ? '完成'
+                              : t.state === 'stopped'
+                                ? '已打断'
+                                : '失败'}
                       </span>
-                      {t.state === 'running' && (
+                      {(t.state === 'running' || t.state === 'queued') && (
                         <button
                           type="button"
                           onClick={() => void stop(t.id)}
                           className="shrink-0 font-mono text-[11px] text-brick hover:text-paper"
                         >
-                          打断
+                          {t.state === 'queued' ? '移除' : '打断'}
                         </button>
                       )}
                     </li>

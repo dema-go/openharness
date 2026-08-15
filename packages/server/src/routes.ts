@@ -55,7 +55,7 @@ export function createApp(deps: AppDeps): { app: Hono; nodeWs: NodeWebSocket } {
   app.get('/api/tasks', (c) => c.json(tasks.list()));
 
   app.post('/api/tasks', async (c) => {
-    const body = await c.req.json<{ agent?: string; cwd?: string; prompt?: string; model?: string }>();
+    const body = await c.req.json<{ agent?: string; cwd?: string; prompt?: string; model?: string; queue?: boolean }>();
     const agent = body.agent as TaskInfo['agent'] | undefined;
     if (!agent || !AGENT_DISPLAY[agent]) return c.json({ error: '未知的 Agent' }, 400);
     if (!enabledAgents.has(agent)) return c.json({ error: `${AGENT_DISPLAY[agent]} 适配器尚未接入` }, 400);
@@ -63,11 +63,11 @@ export function createApp(deps: AppDeps): { app: Hono; nodeWs: NodeWebSocket } {
     if (!existsSync(body.cwd) || !statSync(body.cwd).isDirectory()) {
       return c.json({ error: `目录不存在:${body.cwd}` }, 400);
     }
-    const info = await tasks.start(getAdapter(agent)!, {
-      cwd: body.cwd,
-      prompt: body.prompt.trim(),
-      model: body.model,
-    });
+    const adapter = getAdapter(agent)!;
+    const opts = { cwd: body.cwd, prompt: body.prompt.trim(), model: body.model };
+    const info = body.queue
+      ? await tasks.enqueue(adapter, opts)
+      : await tasks.start(adapter, opts);
     return c.json(info, 201);
   });
 
