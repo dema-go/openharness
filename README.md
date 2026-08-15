@@ -1,8 +1,9 @@
 # OpenHarness
 
 > **个人 Agent 控制台** —— 一个页面,管理、操作、监控你的所有 AI 编程 Agent(Cursor · Claude Code · Codex · DeepSeek Harness),保留每个工具的原生特色。
+> 视觉:《阿衰》式彩色漫画风,由 Open Design × DeepSeek Harness 设计生成([设计文档](docs/DESIGN.md))。
 
-![控制台首页](docs/screenshots/console-home.png)
+![控制台首页](docs/screenshots/cartoon-home.png)
 
 ## 它解决什么问题
 
@@ -77,7 +78,9 @@ pnpm dev:web           # http://127.0.0.1:3901(前端热更新)
 - **11 个 commit、11 轮迭代全部端到端实测**,修出的真实 bug 本身就是最佳实践样本:任务 ID 归因断裂、进程探测误报(PATH 字符串污染)、SIGINT 状态竞态、文件游标跳过元数据(截断文件产生"幽灵会话")、队列自计数、密钥过度/不足脱敏、用量重复计数;
 - **统一事件模型 + 游标增量索引**:重启秒级续读,事件不重不漏;
 - **安全边界**:服务仅监听 127.0.0.1,配置接口 0 密钥泄漏,凭据文件永不读取;
-- **设计**:「任务控制舱」视觉方向 —— LED 信号表(每 Agent 一列,事件点亮)、琥珀/玉色信号灯、Space Grotesk × IBM Plex Mono,支持 reduced-motion。
+- **设计**:「特工小队」漫画风(《阿衰》式)—— 四工具角色化(光标侠/小克/码星人/鲸酱),奶油纸底 + 墨线描边 + 硬实影 + 高饱和撞色,站酷快乐体 × Luckiest Guy × IBM Plex Mono,对话气泡状态、火花条签名元素,支持 reduced-motion。
+
+![发射台](docs/screenshots/cartoon-launcher.png)
 
 ## 文档
 

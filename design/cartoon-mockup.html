@@ -1,0 +1,1708 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OPENHARNESS · 漫画化设计稿</title>
+<style>
+/* ============================================================
+   OPENHARNESS 《阿衰》式彩色漫画风 —— 设计令牌
+   ============================================================ */
+:root{
+  /* 主色(6) */
+  --paper:#FFF3D6;      /* 纸色 · 漫画原稿纸 */
+  --paper-2:#FFFBF0;    /* 纸色 · 亮面(白色漫画格) */
+  --ink:#221D15;        /* 墨色 · 暖黑描边 */
+  --red:#FF4433;        /* 番茄红 */
+  --yellow:#FFC531;     /* 漫画黄 */
+  --cyan:#00C2DC;       /* 电光青 */
+  --purple:#8B4DFF;     /* 弹力紫 */
+  /* 辅助色 */
+  --green:#43D17C;      /* 草丛绿 · 成功/在线 */
+  --blue:#3D8BFF;       /* 天空蓝 · 信息 */
+  --pink:#FF8FB1;       /* 樱花粉 · 腮红/点缀 */
+  --orange:#FF9F1C;     /* 漫画橙 */
+  /* Agent 专属识别色 */
+  --cursor-c:#FF4433;
+  --claude-c:#FF9F1C;
+  --codex-c:#00C2DC;
+  --dsh-c:#8B4DFF;
+  /* 描边/阴影 */
+  --line:3px;
+  --sh-sm:3px 3px 0 var(--ink);
+  --sh-md:6px 6px 0 var(--ink);
+  --sh-lg:9px 9px 0 var(--ink);
+  --sh-color-sm:3px 3px 0 var(--c,var(--ink));
+  /* 字体栈(零外部依赖:推荐字体在前,系统字体兜底) */
+  --font-hand:"ZCOOL KuaiLe","站酷快乐体","FZKaTong-M19S","Yuanti SC","YouYuan","Comic Sans MS","PingFang SC","Microsoft YaHei",sans-serif;
+  --font-comic:"Bangers","Luckiest Guy","Arial Black","Impact","Comic Sans MS",sans-serif;
+  --font-mono:"JetBrains Mono","Cascadia Code","SF Mono","Menlo","Consolas","Courier New",monospace;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:var(--paper);
+  background-image:
+    radial-gradient(circle, rgba(34,29,21,.05) 1px, transparent 1.35px);
+  background-size:12px 12px;
+  color:var(--ink);
+  font-family:var(--font-hand);
+  font-size:15px;
+  line-height:1.55;
+  min-height:100vh;
+}
+::selection{background:var(--yellow)}
+button{font-family:inherit;cursor:pointer}
+input,textarea,select{font-family:inherit}
+.mono{font-family:var(--font-mono)}
+
+/* 焦点可见 */
+.btn:focus-visible,.tab:focus-visible,.chip-btn:focus-visible,.sug-card:focus-visible,
+.agent-opt:focus-visible,input:focus-visible,textarea:focus-visible,label.star-check input:focus-visible + .starc,
+.icon-btn:focus-visible{
+  outline:3px dashed var(--blue);
+  outline-offset:3px;
+}
+
+/* ---------- 网点纹理(radial-gradient 复刻网点纸) ---------- */
+.halftone{background-image:radial-gradient(circle, rgba(34,29,21,.13) 1px, transparent 1.35px);background-size:8px 8px}
+.halftone-dense{background-image:radial-gradient(circle, rgba(34,29,21,.16) 1.1px, transparent 1.25px);background-size:5px 5px}
+.halftone-ink{background-image:radial-gradient(circle, rgba(34,29,21,.22) 1px, transparent 1.3px);background-size:6px 6px}
+.fill-dots{position:relative;overflow:hidden}
+.fill-dots::after{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background-image:radial-gradient(circle, rgba(34,29,21,.20) 1px, transparent 1.3px);
+  background-size:6px 6px;
+}
+
+/* ---------- 通用漫画组件 ---------- */
+.panel-box{  /* 白色漫画格 */
+  background:var(--paper-2);
+  border:var(--line) solid var(--ink);
+  border-radius:18px 12px 20px 13px;
+  box-shadow:var(--sh-md);
+}
+.btn{
+  display:inline-flex;align-items:center;gap:8px;
+  background:#fff;
+  border:var(--line) solid var(--ink);
+  border-radius:12px 9px 13px 10px;
+  padding:9px 16px;
+  font-weight:700;font-size:15px;
+  box-shadow:var(--sh-sm);
+  transition:transform .15s ease, box-shadow .15s ease;
+  min-height:44px;
+}
+.btn:hover{transform:translate(-1px,-2px);box-shadow:5px 5px 0 var(--ink)}
+.btn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+.btn-primary{background:var(--yellow)}
+.btn-danger{background:var(--red);color:#fff}
+.btn-ghost{background:transparent;box-shadow:none}
+.btn-ghost:hover{box-shadow:var(--sh-sm)}
+.btn-sm{padding:5px 12px;font-size:13px;min-height:36px}
+.btn-lg{font-size:17px;padding:12px 22px}
+.btn-block{width:100%;justify-content:center}
+
+.chip{
+  display:inline-flex;align-items:center;gap:6px;
+  border:2.5px solid var(--ink);
+  border-radius:99px;
+  padding:3px 12px;
+  font-size:13px;font-weight:700;
+  background:#fff;
+  box-shadow:2.5px 2.5px 0 rgba(34,29,21,.35);
+}
+.chip .dot{width:9px;height:9px;border-radius:50%;border:2px solid var(--ink);background:var(--green)}
+.chip.live{color:var(--red)}
+
+.bubble{  /* 对话气泡 */
+  position:relative;
+  background:#fff;
+  border:var(--line) solid var(--ink);
+  border-radius:16px 12px 16px 12px;
+  box-shadow:4px 4px 0 rgba(34,29,21,.9);
+  padding:10px 14px;
+}
+.bubble::after{ /* 气泡尾巴(带两条边的旋转方块) */
+  content:"";position:absolute;bottom:-11px;left:18px;
+  width:16px;height:16px;background:#fff;
+  border-right:var(--line) solid var(--ink);
+  border-bottom:var(--line) solid var(--ink);
+  transform:rotate(45deg) skew(6deg,6deg);
+}
+.bubble.tail-r::after{left:auto;right:18px}
+.bubble.no-tail::after{display:none}
+
+.sec-title{
+  display:inline-flex;flex-direction:column;gap:4px;
+  font-size:21px;font-weight:700;letter-spacing:1px;
+}
+.sec-title .en{font-family:var(--font-comic);font-size:15px;letter-spacing:2px;color:var(--c,var(--purple))}
+.sec-title .squig{width:120px;height:8px;color:var(--c,var(--red))}
+
+/* 集中线(速度线,用于「运行中」) */
+.speedlines{position:relative}
+.speedlines::before{
+  content:"";position:absolute;inset:-45%;pointer-events:none;z-index:0;
+  background:repeating-conic-gradient(from 0deg at 50% 50%, rgba(34,29,21,.14) 0deg 4deg, transparent 4deg 15deg);
+}
+.speedlines>*{position:relative;z-index:1}
+
+/* ============================================================
+   页边涂鸦(低透明度的爆炸星,压在纸面上,不挡内容)
+   ============================================================ */
+.doodle{position:fixed;z-index:0;pointer-events:none;opacity:.22}
+.doodle use{transform-origin:center}
+.d1{top:64px;right:18px;width:96px;height:96px;color:var(--yellow);transform:rotate(14deg)}
+.d2{top:38%;left:8px;width:54px;height:54px;color:var(--cyan);transform:rotate(-18deg)}
+.d3{bottom:12%;right:12px;width:40px;height:40px;color:var(--red)}
+.d4{top:12%;left:30%;width:30px;height:30px;color:var(--purple);transform:rotate(30deg)}
+.d5{bottom:4%;left:12%;width:70px;height:70px;color:var(--pink);opacity:.18}
+
+/* ============================================================
+   顶部栏(漫画刊头)
+   ============================================================ */
+.topbar{
+  position:sticky;top:0;z-index:40;
+  display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
+  background:var(--paper-2);
+  border-bottom:4px solid var(--ink);
+  box-shadow:0 6px 0 rgba(34,29,21,.14);
+  padding:10px 22px;
+}
+.brand{display:flex;align-items:center;gap:14px}
+.wordmark{
+  font-family:var(--font-comic);
+  font-size:34px;line-height:1;letter-spacing:1px;
+  display:flex;align-items:center;
+}
+.wordmark span{
+  display:inline-block;
+  color:var(--c,#fff);
+  -webkit-text-stroke:2px var(--ink);
+  paint-order:stroke fill;
+  text-shadow:3px 3px 0 var(--ink);
+  transform:rotate(var(--r,0deg));
+}
+.beta-sticker{position:relative;width:54px;height:54px;display:grid;place-items:center}
+.beta-sticker svg{position:absolute;inset:0;color:var(--yellow);filter:drop-shadow(2px 2px 0 rgba(34,29,21,.9))}
+.beta-sticker b{
+  position:relative;z-index:1;transform:rotate(-12deg);
+  font-family:var(--font-comic);font-size:13px;letter-spacing:1px;
+  -webkit-text-stroke:1px var(--ink);
+  paint-order:stroke fill;
+}
+.topbar-right{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.clock-chip{
+  font-weight:700;font-size:14px;
+  background:var(--ink);color:#fff;
+  border-radius:9px;padding:6px 12px;letter-spacing:1px;
+}
+.status-chip .dot{animation:blinkDot 1.4s steps(1) infinite}
+@keyframes blinkDot{0%,55%{opacity:1}56%,100%{opacity:.25}}
+
+/* ============================================================
+   页面布局:左 Agent 卡列 + 右主区
+   ============================================================ */
+.layout{
+  position:relative;z-index:1;
+  display:grid;grid-template-columns:340px 1fr;
+  gap:26px;
+  padding:26px 22px 40px;
+  max-width:1560px;margin:0 auto;
+}
+.agents{display:flex;flex-direction:column;gap:22px}
+.aside-title{display:flex;align-items:center;gap:10px;font-size:19px}
+.aside-title .squig{width:90px;height:8px;color:var(--yellow)}
+
+/* ---------- Agent 卡(漫画格) ---------- */
+.agent-card{
+  --agent:var(--cursor-c);
+  position:relative;
+  background:#fff;
+  border:var(--line) solid var(--ink);
+  border-top:12px solid var(--agent);
+  border-radius:16px 12px 18px 13px;
+  box-shadow:var(--sh-md);
+  padding:16px 16px 14px;
+  overflow:hidden;
+  transition:transform .18s ease, box-shadow .18s ease;
+}
+.agent-card:nth-child(2){transform:rotate(-.7deg)}
+.agent-card:nth-child(3){transform:rotate(.5deg)}
+.agent-card:nth-child(4){transform:rotate(-.45deg)}
+.agent-card:nth-child(5){transform:rotate(.6deg)}
+.agent-card:hover{transform:rotate(0) translate(-2px,-3px);box-shadow:9px 9px 0 var(--ink)}
+.agent-card[data-agent="cursor"]{--agent:var(--cursor-c)}
+.agent-card[data-agent="claude"]{--agent:var(--claude-c)}
+.agent-card[data-agent="codex"]{--agent:var(--codex-c)}
+.agent-card[data-agent="dsh"]{--agent:var(--dsh-c)}
+.agent-card.is-offline{background:#FAF4E4}
+.agent-card.is-offline .avatar-wrap{opacity:.45;filter:grayscale(.6)}
+.agent-card.is-offline .ac-name,.agent-card.is-offline .ac-role,.agent-card.is-offline .sb-label{opacity:.55}
+.agent-card.flash{animation:cardFlash .5s ease}
+@keyframes cardFlash{
+  0%{border-color:var(--yellow);box-shadow:0 0 0 0 var(--yellow)}
+  50%{border-color:var(--yellow);box-shadow:0 0 0 8px rgba(255,197,49,.6)}
+  100%{border-color:var(--ink)}
+}
+
+.ac-top{display:flex;align-items:flex-start;gap:12px}
+.avatar-wrap{flex:0 0 72px}
+.avatar{width:72px;height:72px;display:block}
+.avatar.mini{width:40px;height:40px}
+.ac-id{flex:1;min-width:0}
+.ac-name{font-family:var(--font-comic);font-size:21px;letter-spacing:1.5px;line-height:1.1}
+.ac-role{font-size:12.5px;color:rgba(34,29,21,.65);margin-top:3px}
+.sticker-run{
+  flex:0 0 auto;
+  font-family:var(--font-comic);font-size:13px;letter-spacing:1px;
+  color:var(--red);background:#fff;
+  border:2.5px solid var(--red);border-radius:99px;
+  padding:2px 9px;
+  transform:rotate(-9deg);
+  box-shadow:2.5px 2.5px 0 var(--red);
+  animation:wiggle 2.2s ease-in-out infinite;
+}
+@keyframes wiggle{0%,100%{transform:rotate(-9deg)}50%{transform:rotate(3deg)}}
+.sticker-off{
+  font-family:var(--font-comic);font-size:12px;letter-spacing:1px;
+  color:rgba(34,29,21,.6);background:#EFE7D2;
+  border:2.5px solid rgba(34,29,21,.55);border-radius:6px;
+  padding:2px 8px;transform:rotate(4deg);
+}
+.sticker-ok{
+  font-family:var(--font-comic);font-size:12px;letter-spacing:1px;
+  color:var(--green);background:#fff;
+  border:2.5px solid var(--green);border-radius:99px;
+  padding:2px 9px;transform:rotate(5deg);
+  box-shadow:2.5px 2.5px 0 var(--green);
+}
+.ac-status{margin-top:14px;font-size:14px;padding:9px 13px}
+.ac-stats{display:flex;gap:12px;margin-top:14px}
+.ac-stats .stat{
+  flex:1;display:flex;align-items:baseline;gap:7px;
+  background:var(--paper-2);
+  border:2.5px solid var(--ink);
+  border-radius:9px 6px 10px 7px;
+  padding:7px 11px;
+  box-shadow:2.5px 2.5px 0 rgba(34,29,21,.4);
+}
+.ac-stats .stat b{font-family:var(--font-mono);font-size:18px;color:var(--agent)}
+.ac-stats .stat span{font-size:12px;color:rgba(34,29,21,.6)}
+
+/* 信号火花条(LED 表漫画化) */
+.sparkbar{display:flex;align-items:center;gap:10px;margin-top:13px}
+.sb-label{font-size:12px;color:rgba(34,29,21,.6);flex:0 0 auto}
+.sparks{display:flex;gap:3.5px;flex:1;justify-content:flex-end}
+.spark{width:16px;height:16px;color:var(--agent)}
+.spark.off{color:#fff;--star-stroke:#CFC4A6}
+.spark.pop{animation:popStar .5s cubic-bezier(.2,1.6,.4,1) both}
+.spark.tw{animation:twinkle 3.4s ease-in-out infinite}
+.spark.tw.t2{animation-delay:1.1s}
+.spark.tw.t3{animation-delay:2.2s}
+@keyframes popStar{
+  0%{transform:scale(.1) rotate(-40deg)}
+  55%{transform:scale(1.35) rotate(12deg)}
+  100%{transform:scale(1) rotate(0)}
+}
+@keyframes twinkle{0%,86%,100%{opacity:1}93%{opacity:.4}}
+
+/* ============================================================
+   主区:标签页 + 面板
+   ============================================================ */
+.main{min-width:0}
+.tabs{
+  display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;
+  border-bottom:var(--line) solid var(--ink);
+}
+.tab{
+  border:var(--line) solid var(--ink);
+  border-bottom:none;
+  border-radius:14px 14px 0 0;
+  background:#fff;
+  padding:10px 20px;
+  font-weight:700;font-size:15px;
+  min-height:44px;
+  transform:translateY(3px);
+  transition:background .15s ease, color .15s ease, transform .15s ease;
+}
+.tab:hover{background:var(--yellow)}
+.tab[aria-selected="true"]{
+  background:var(--ink);color:#fff;
+  transform:translateY(3px);
+  box-shadow:inset 0 -6px 0 var(--ink);
+}
+.tab[aria-selected="true"]::before{content:"★ ";color:var(--yellow)}
+.tab-pano{margin-left:auto;border:2.5px solid var(--ink);border-bottom:none;transform:translateY(2.5px)}
+.panels{margin-top:0}
+
+.panel{display:none}
+.panel.active{display:block}
+.panels.expanded .panel{display:block}
+.panels.expanded .exp-div{display:block}
+.exp-div{display:none}
+.exp-div .strip{
+  display:flex;align-items:center;gap:12px;
+  margin:30px 0 22px;
+  font-family:var(--font-comic);font-size:15px;letter-spacing:2px;color:rgba(34,29,21,.55);
+}
+.exp-div .strip::before,.exp-div .strip::after{
+  content:"";flex:1;height:0;border-top:3px dashed rgba(34,29,21,.35);
+}
+
+.panel-head{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  padding:22px 4px 14px;
+}
+.panel-head .spacer{flex:1}
+
+/* ---------- 活动流 ---------- */
+.stream{
+  background:#fff;
+  border:var(--line) solid var(--ink);
+  border-radius:16px 12px 18px 13px;
+  box-shadow:var(--sh-md);
+  padding:12px 14px;
+  max-height:480px;overflow-y:auto;
+  display:flex;flex-direction:column;gap:9px;
+}
+.stream::-webkit-scrollbar{width:13px}
+.stream::-webkit-scrollbar-thumb{background:var(--yellow);border:2.5px solid var(--ink);border-radius:9px}
+.stream::-webkit-scrollbar-track{background:var(--paper);border-radius:9px}
+.event{
+  display:grid;grid-template-columns:72px 92px 104px 1fr;
+  gap:10px;align-items:center;
+  padding:8px 4px 10px;
+  border-bottom:2px dotted rgba(34,29,21,.28);
+}
+.event:last-child{border-bottom:none}
+.event.slide-in{animation:slideIn .45s cubic-bezier(.15,1.25,.35,1) both}
+@keyframes slideIn{
+  from{transform:translateX(120%) rotate(1deg);opacity:0}
+  to{transform:translateX(0) rotate(0);opacity:1}
+}
+.ev-time{font-size:12px;color:rgba(34,29,21,.6);font-weight:700}
+.ev-agent{
+  --c:var(--red);
+  display:inline-flex;justify-content:center;
+  background:var(--c);color:#fff;
+  border:2.5px solid var(--ink);border-radius:7px 5px 8px 6px;
+  padding:3px 8px;
+  font-family:var(--font-comic);font-size:13px;letter-spacing:1.5px;
+  box-shadow:2.5px 2.5px 0 rgba(34,29,21,.5);
+  transform:rotate(-1.5deg);
+}
+.ev-agent[data-agent="claude"]{--c:var(--claude-c);color:var(--ink)}
+.ev-agent[data-agent="codex"]{--c:var(--codex-c);color:var(--ink)}
+.ev-agent[data-agent="dsh"]{--c:var(--dsh-c)}
+.ev-type{
+  display:inline-flex;justify-content:center;
+  border:2.5px solid var(--ink);border-radius:7px 5px 8px 6px;
+  padding:3px 8px;
+  font-family:var(--font-comic);font-size:12.5px;letter-spacing:1px;
+  box-shadow:2.5px 2.5px 0 rgba(34,29,21,.5);
+  transform:rotate(1.2deg);
+  background:var(--tc,#fff);color:var(--tt,var(--ink));
+}
+.ev-type.ev-task{--tc:var(--yellow)}
+.ev-type.ev-think{--tc:var(--purple);--tt:#fff}
+.ev-type.ev-file{--tc:var(--cyan)}
+.ev-type.ev-out{--tc:var(--green)}
+.ev-type.ev-done{--tc:var(--blue);--tt:#fff}
+.ev-type.ev-error{--tc:var(--red);--tt:#fff}
+.ev-msg{font-size:14px;padding:8px 13px}
+
+/* ---------- 会话索引 ---------- */
+.sess-toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:4px 4px 16px}
+.search-wrap{position:relative;flex:1;min-width:220px;max-width:380px}
+.search-wrap svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);width:18px;height:18px;color:rgba(34,29,21,.55)}
+.inp{
+  width:100%;padding:10px 12px 10px 38px;
+  background:#fff;border:var(--line) solid var(--ink);
+  border-radius:10px 7px 11px 8px;
+  box-shadow:inset 3px 3px 0 rgba(34,29,21,.08);
+  font-size:14px;
+}
+.inp:focus{background:var(--paper-2)}
+.filter-chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip-btn{
+  background:#fff;border:2.5px solid var(--ink);border-radius:99px;
+  padding:6px 14px;font-size:13px;font-weight:700;
+  box-shadow:2.5px 2.5px 0 rgba(34,29,21,.35);
+  transition:transform .15s ease, box-shadow .15s ease;
+  min-height:36px;
+}
+.chip-btn:hover{transform:translate(-1px,-1px);box-shadow:3.5px 3.5px 0 rgba(34,29,21,.4)}
+.chip-btn.on{background:var(--ink);color:#fff}
+.sess-list{display:flex;flex-direction:column;gap:13px}
+.sess{
+  display:grid;grid-template-columns:78px 1fr 90px 110px 96px;
+  gap:12px;align-items:center;
+  background:#fff;border:var(--line) solid var(--ink);
+  border-radius:13px 10px 14px 11px;
+  box-shadow:var(--sh-sm);
+  padding:11px 16px;
+  overflow:hidden;
+  transition:transform .15s ease, box-shadow .15s ease;
+}
+.sess:hover{transform:translate(-1px,-2px);box-shadow:5px 5px 0 var(--ink)}
+.sess .sid{font-size:13px;font-weight:700;color:rgba(34,29,21,.6)}
+.sess .sess-title{font-size:15px;font-weight:700}
+.sess .sess-meta{font-size:12px;color:rgba(34,29,21,.6);margin-top:2px;display:flex;gap:8px;align-items:center}
+.sess .msgs{font-family:var(--font-mono);font-size:13px;font-weight:700}
+.sess .sess-time{font-family:var(--font-mono);font-size:12.5px;color:rgba(34,29,21,.6)}
+.sess-status{
+  justify-self:end;
+  font-family:var(--font-comic);font-size:13px;letter-spacing:1px;
+  border:2.5px solid var(--ink);border-radius:8px 6px 9px 7px;
+  padding:3px 10px;box-shadow:2.5px 2.5px 0 rgba(34,29,21,.4);
+}
+.sess-status.doing{background:var(--yellow);color:var(--red);animation:wiggle 2.2s ease-in-out infinite}
+.sess-status.done{background:var(--green)}
+
+/* 空状态 */
+.empty{
+  margin-top:26px;
+  display:flex;flex-direction:column;align-items:center;gap:8px;
+  text-align:center;
+}
+.empty-face{width:84px;height:84px;display:block}
+.empty .bubble{max-width:420px;font-size:14.5px}
+.empty .hint{font-size:13px;color:rgba(34,29,21,.55)}
+.empty .btn{margin-top:10px}
+
+/* ---------- 用量 ---------- */
+.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.stat-card{
+  --c:var(--red);
+  position:relative;
+  background:#fff;border:var(--line) solid var(--ink);
+  border-radius:16px 11px 17px 12px;
+  box-shadow:var(--sh-md);
+  padding:16px 18px 15px;
+}
+.stat-card.hl{background:var(--yellow)}
+.stat-card .sc-label{font-size:13.5px;font-weight:700;color:rgba(34,29,21,.65)}
+.stat-card .sc-num{font-family:var(--font-comic);font-size:40px;line-height:1.15;color:var(--c);letter-spacing:1px}
+.stat-card.hl .sc-num{color:var(--ink)}
+.stat-card .sc-num small{font-family:var(--font-hand);font-size:15px;color:rgba(34,29,21,.6);margin-left:4px}
+.stat-card .sc-sub{font-size:12.5px;color:rgba(34,29,21,.55);margin-top:4px}
+.stat-card .sc-spark{position:absolute;top:12px;right:14px;width:26px;height:26px;color:var(--c)}
+.stat-card .sc-mvp{
+  position:absolute;top:-14px;right:12px;
+  font-family:var(--font-comic);font-size:13px;letter-spacing:1px;
+  background:var(--red);color:#fff;border:2.5px solid var(--ink);
+  padding:3px 10px;border-radius:8px 6px 9px 7px;
+  box-shadow:2.5px 2.5px 0 var(--ink);
+  transform:rotate(5deg);
+}
+
+.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:20px}
+.chart-grid .full{grid-column:1/-1}
+.chart-card{
+  background:#fff;border:var(--line) solid var(--ink);
+  border-radius:16px 12px 18px 13px;
+  box-shadow:var(--sh-md);
+  padding:16px 18px;
+}
+.chart-title{display:flex;align-items:center;gap:9px;font-size:16px;font-weight:700;margin-bottom:16px}
+.chart-title svg{width:20px;height:20px;color:var(--c,var(--red))}
+
+/* 横向条形图 */
+.hbar-list{display:flex;flex-direction:column;gap:14px}
+.hbar{display:grid;grid-template-columns:150px 1fr 70px;gap:12px;align-items:center}
+.hbar-label{display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:700}
+.hbar-label .dot{width:12px;height:12px;border:2px solid var(--ink);border-radius:3px;background:var(--c)}
+.hbar-track{
+  height:26px;background:#fff;
+  border:2.5px solid var(--ink);border-radius:9px;
+  overflow:hidden;box-shadow:inset 2.5px 2.5px 0 rgba(34,29,21,.08);
+}
+.hbar-fill{height:100%;background:var(--c);border-right:2.5px solid var(--ink)}
+.hbar-val{font-family:var(--font-mono);font-size:13px;font-weight:700;text-align:right}
+
+/* 纵向条形图 */
+.vchart{display:flex;align-items:flex-end;gap:14px;height:175px;padding-top:24px}
+.vbar{flex:1;display:flex;flex-direction:column;align-items:center;gap:7px;height:100%;justify-content:flex-end}
+.vbar-fill{
+  --c:var(--yellow);
+  width:100%;max-width:44px;height:var(--h);
+  background:var(--c);
+  border:2.5px solid var(--ink);
+  border-radius:8px 8px 4px 4px;
+  box-shadow:3px 3px 0 rgba(34,29,21,.3);
+  position:relative;
+}
+.vbar-fill .vval{
+  position:absolute;top:-24px;left:50%;transform:translateX(-50%);
+  font-family:var(--font-mono);font-size:11.5px;font-weight:700;
+}
+.vbar-fill .vburst{position:absolute;top:-30px;right:-12px;width:34px;height:34px;color:var(--yellow);filter:drop-shadow(2px 2px 0 rgba(34,29,21,.8))}
+.vbar-day{font-size:12.5px;font-weight:700;color:rgba(34,29,21,.65)}
+
+/* ---------- 配置 ---------- */
+.cfg-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.cfg-card{
+  background:#fff;border:var(--line) solid var(--ink);
+  border-radius:16px 12px 18px 13px;
+  box-shadow:var(--sh-md);
+  padding:16px 18px;
+}
+.cfg-card h3{font-size:16px;margin-bottom:13px;display:flex;align-items:center;gap:8px}
+.cfg-card h3 svg{width:19px;height:19px;color:var(--c,var(--cyan))}
+.cfg-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:2px dotted rgba(34,29,21,.25)}
+.cfg-row:last-of-type{border-bottom:none}
+.cfg-row .label{font-size:14px;font-weight:700}
+.cfg-row .sub{font-size:12px;color:rgba(34,29,21,.55)}
+.key-chip{
+  font-family:var(--font-mono);font-size:12.5px;font-weight:700;
+  background:var(--paper-2);border:2.5px solid var(--ink);border-radius:8px;
+  padding:4px 10px;box-shadow:2px 2px 0 rgba(34,29,21,.35);
+}
+.ok-chip{font-size:12px;font-weight:700;color:var(--green)}
+.bad-chip{
+  font-size:12px;font-weight:700;color:#fff;background:var(--red);
+  border:2px solid var(--ink);border-radius:6px;padding:1px 8px;
+  box-shadow:2px 2px 0 rgba(34,29,21,.4);
+}
+.theme-chips{display:flex;gap:10px;flex-wrap:wrap}
+.kbd{
+  display:inline-block;
+  font-family:var(--font-mono);font-size:12.5px;font-weight:700;
+  background:#fff;border:2.5px solid var(--ink);border-bottom:5px solid var(--ink);
+  border-radius:7px;padding:2px 9px;
+}
+.kbd-list{display:flex;flex-direction:column;gap:9px}
+.kbd-row{display:flex;align-items:center;gap:10px;font-size:13.5px}
+.kbd-row span{flex:1;color:rgba(34,29,21,.7)}
+
+/* 星形开关 */
+.star-check{display:flex;align-items:center;gap:11px;cursor:pointer;padding:6px 0}
+.star-check input{position:absolute;opacity:0;width:1px;height:1px}
+.star-check .starc{width:26px;height:26px;color:#fff;--star-stroke:#CFC4A6;flex:0 0 auto;transition:color .15s ease}
+.star-check input:checked + .starc{color:var(--yellow);--star-stroke:var(--ink);animation:popStar .35s cubic-bezier(.2,1.6,.4,1)}
+.star-check .sc-text{font-size:14.5px;font-weight:700}
+.star-check .sc-text small{display:block;font-size:12px;color:rgba(34,29,21,.55);font-weight:400}
+.star-check .sc-state{font-family:var(--font-mono);font-size:12px;font-weight:700;margin-left:auto;color:rgba(34,29,21,.6)}
+
+/* ---------- 发任务抽屉 ---------- */
+.drawer-backdrop{
+  position:fixed;inset:0;z-index:49;
+  background:rgba(34,29,21,.28);
+  opacity:1;transition:opacity .25s ease;
+}
+.drawer-backdrop.hidden{opacity:0;pointer-events:none}
+.drawer{
+  position:fixed;top:0;right:0;bottom:0;z-index:50;
+  width:min(470px,96vw);
+  background:var(--paper);
+  background-image:radial-gradient(circle, rgba(34,29,21,.06) 1px, transparent 1.35px);
+  background-size:11px 11px;
+  border-left:4px solid var(--ink);
+  box-shadow:-10px 0 0 rgba(34,29,21,.22);
+  display:flex;flex-direction:column;
+  transition:transform .3s cubic-bezier(.3,1.3,.5,1);
+}
+.drawer.closed{transform:translateX(108%)}
+.drawer-head{
+  display:flex;align-items:center;gap:12px;
+  background:var(--paper-2);
+  border-bottom:4px solid var(--ink);
+  padding:14px 18px;
+}
+.drawer-head .burst{width:44px;height:44px;color:var(--yellow);filter:drop-shadow(2.5px 2.5px 0 rgba(34,29,21,.85))}
+.drawer-head h2{font-size:21px;font-weight:700;letter-spacing:1px}
+.drawer-head .demo-chip{
+  font-size:11.5px;font-weight:700;color:rgba(34,29,21,.6);
+  border:2px solid rgba(34,29,21,.5);border-radius:99px;padding:2px 10px;
+}
+.icon-btn{
+  margin-left:auto;
+  width:44px;height:44px;
+  display:grid;place-items:center;
+  background:#fff;border:var(--line) solid var(--ink);border-radius:50%;
+  font-size:19px;font-weight:700;
+  box-shadow:var(--sh-sm);
+  transition:transform .15s ease, box-shadow .15s ease;
+}
+.icon-btn:hover{transform:rotate(90deg);box-shadow:5px 5px 0 var(--ink)}
+.drawer-body{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:18px}
+.field-label{display:flex;align-items:center;gap:7px;font-size:14.5px;font-weight:700;margin-bottom:8px}
+.field-label svg{width:17px;height:17px;color:var(--c,var(--purple))}
+.field-label .req{color:var(--red);font-family:var(--font-comic);font-size:13px}
+.agent-opts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.agent-opt{
+  --agent:var(--cursor-c);
+  position:relative;
+  display:flex;align-items:center;gap:9px;
+  background:#fff;border:var(--line) solid var(--ink);
+  border-radius:13px 9px 14px 10px;
+  padding:9px 11px;
+  box-shadow:var(--sh-sm);
+  text-align:left;
+  transition:transform .15s ease, box-shadow .15s ease;
+}
+.agent-opt:hover{transform:translate(-1px,-2px);box-shadow:5px 5px 0 var(--ink)}
+.agent-opt.selected{background:var(--yellow)}
+.agent-opt.selected::after{
+  content:"✓ 选中!";position:absolute;top:-12px;right:8px;
+  font-size:11.5px;font-weight:700;color:#fff;background:var(--ink);
+  border-radius:6px;padding:1px 8px;transform:rotate(4deg);
+}
+.agent-opt[data-agent="cursor"]{--agent:var(--cursor-c)}
+.agent-opt[data-agent="claude"]{--agent:var(--claude-c)}
+.agent-opt[data-agent="codex"]{--agent:var(--codex-c)}
+.agent-opt[data-agent="dsh"]{--agent:var(--dsh-c)}
+.ao-name{font-family:var(--font-comic);font-size:15.5px;letter-spacing:1px;line-height:1.1}
+.ao-tag{display:block;font-size:11.5px;color:rgba(34,29,21,.6)}
+.dir-row{display:flex;gap:9px}
+.dir-row .inp{flex:1}
+textarea.inp{height:118px;resize:vertical;padding:12px;line-height:1.6}
+
+/* 建议卡(按特色匹配) */
+.sug-wrap{display:flex;flex-direction:column;gap:11px}
+.sug-title{display:flex;align-items:center;gap:8px;font-size:14.5px;font-weight:700}
+.sug-title svg{width:18px;height:18px;color:var(--yellow)}
+.sug-card{
+  --agent:var(--claude-c);
+  position:relative;
+  background:#fff;border:var(--line) solid var(--ink);
+  border-radius:13px 10px 14px 11px;
+  box-shadow:var(--sh-sm);
+  padding:12px 14px 11px;
+  text-align:left;
+  transition:transform .15s ease, box-shadow .15s ease;
+}
+.sug-card:hover{transform:translate(-1px,-2px);box-shadow:5px 5px 0 var(--ink)}
+.sug-card.selected{background:var(--paper-2)}
+.sug-ribbon{
+  position:absolute;top:-13px;left:12px;
+  background:var(--red);color:#fff;
+  font-family:var(--font-comic);font-size:12px;letter-spacing:1px;
+  border:2.5px solid var(--ink);border-radius:7px;
+  padding:1px 9px;transform:rotate(-5deg);
+  box-shadow:2px 2px 0 rgba(34,29,21,.5);
+}
+.sug-card:nth-child(3) .sug-ribbon{background:var(--blue)}
+.sug-card:nth-child(4) .sug-ribbon{background:var(--green);color:var(--ink)}
+.sug-head{display:flex;align-items:center;gap:9px;margin-bottom:6px}
+.sug-head b{font-family:var(--font-comic);font-size:15px;letter-spacing:1px}
+.sug-reason{font-size:13.5px;margin-bottom:6px}
+.sug-tags{display:flex;gap:6px;flex-wrap:wrap}
+.sug-tags span{
+  font-size:11.5px;font-weight:700;
+  background:var(--agent);color:var(--ink);
+  border:2px solid var(--ink);border-radius:99px;padding:1px 9px;
+}
+.sug-tags span.on-dark{color:#fff}
+.drawer-foot{
+  display:flex;gap:12px;
+  background:var(--paper-2);
+  border-top:4px solid var(--ink);
+  padding:14px 18px;
+}
+.drawer-foot .btn{flex:1}
+
+/* ---------- 页脚 ---------- */
+.foot{
+  position:relative;z-index:1;
+  text-align:center;padding:10px 0 44px;
+}
+.foot .fin{font-size:15px;font-weight:700;color:rgba(34,29,21,.6)}
+.foot .tbc{
+  display:inline-flex;align-items:center;gap:8px;
+  font-family:var(--font-comic);font-size:26px;letter-spacing:2px;
+  color:var(--red);margin-top:2px;
+  -webkit-text-stroke:1.2px var(--ink);
+  text-shadow:3px 3px 0 rgba(34,29,21,.85);
+}
+.foot .caption{font-size:12.5px;color:rgba(34,29,21,.5);margin-top:10px}
+
+/* ---------- 响应式 ---------- */
+@media (max-width:1120px){
+  .layout{grid-template-columns:1fr}
+  .agents{display:grid;grid-template-columns:1fr 1fr}
+  .sess{grid-template-columns:64px 1fr 96px;grid-auto-rows:auto}
+  .sess .msgs,.sess .sess-time{display:none}
+  .event{grid-template-columns:68px 84px 96px 1fr}
+}
+@media (max-width:720px){
+  .agents{grid-template-columns:1fr}
+  .stat-grid,.chart-grid,.cfg-grid{grid-template-columns:1fr}
+  .event{grid-template-columns:1fr;gap:6px}
+  .ev-time,.ev-agent,.ev-type{justify-self:start}
+  .wordmark{font-size:26px}
+  .tabs{flex-wrap:wrap}
+  .tab-pano{margin-left:0}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}
+</style>
+</head>
+<body>
+
+<!-- ============ SVG 素材库(全部内联,零外部依赖) ============ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <!-- 爆炸星形(12 尖) -->
+    <symbol id="burst" viewBox="0 0 100 100">
+      <path fill="currentColor" stroke="#221D15" stroke-width="5" stroke-linejoin="round"
+        d="M50.0,2.0 57.8,21.0 74.0,8.4 71.2,28.8 91.6,26.0 79.0,42.2 98.0,50.0 79.0,57.8 91.6,74.0 71.2,71.2 74.0,91.6 57.8,79.0 50.0,98.0 42.2,79.0 26.0,91.6 28.8,71.2 8.4,74.0 21.0,57.8 2.0,50.0 21.0,42.2 8.4,26.0 28.8,28.8 26.0,8.4 42.2,21.0 Z"/>
+    </symbol>
+    <!-- 五角星(信号火花) -->
+    <symbol id="star" viewBox="0 0 24 24">
+      <path fill="currentColor" stroke="var(--star-stroke,#221D15)" stroke-width="2.6" stroke-linejoin="round"
+        d="M12.0,2.0 14.5,8.6 21.5,8.9 16.0,13.3 17.9,20.1 12.0,16.2 6.1,20.1 8.0,13.3 2.5,8.9 9.5,8.6 Z"/>
+    </symbol>
+    <!-- 四角闪光 -->
+    <symbol id="spark4" viewBox="0 0 24 24">
+      <path fill="currentColor" stroke="#221D15" stroke-width="2" stroke-linejoin="round"
+        d="M12.0,1.5 12.0,12.0 22.5,12.0 12.0,12.0 12.0,22.5 12.0,12.0 1.5,12.0 12.0,12.0 Z"/>
+    </symbol>
+    <!-- 手绘波浪线(标题下划线) -->
+    <symbol id="squig" viewBox="0 0 120 8">
+      <path fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"
+        d="M2 6 Q12 0 22 6 T42 6 T62 6 T82 6 T102 6 T118 6"/>
+    </symbol>
+    <!-- 闪电(Codex 天线) -->
+    <symbol id="bolt" viewBox="0 0 24 24">
+      <path fill="currentColor" stroke="#221D15" stroke-width="2.4" stroke-linejoin="round"
+        d="M13.5 2 L5 13.5 L11 13.5 L9.5 22 L19 10 L13 10 Z"/>
+    </symbol>
+
+    <!-- Q版头像:Cursor 光标侠(番茄红机器人+光标箭头) -->
+    <symbol id="av-cursor" viewBox="0 0 100 100">
+      <rect x="5" y="14" width="90" height="82" rx="22" fill="var(--agent)" stroke="#221D15" stroke-width="5"/>
+      <rect x="0" y="40" width="12" height="26" rx="5" fill="var(--agent)" stroke="#221D15" stroke-width="4"/>
+      <rect x="88" y="40" width="12" height="26" rx="5" fill="var(--agent)" stroke="#221D15" stroke-width="4"/>
+      <line x1="50" y1="14" x2="50" y2="3" stroke="#221D15" stroke-width="5"/>
+      <circle cx="50" cy="3" r="8" fill="#FFC531" stroke="#221D15" stroke-width="4"/>
+      <rect x="20" y="30" width="60" height="46" rx="13" fill="#fff" stroke="#221D15" stroke-width="4"/>
+      <rect x="30" y="44" width="12" height="14" rx="2.5" fill="#221D15"/>
+      <rect x="58" y="44" width="12" height="14" rx="2.5" fill="#221D15"/>
+      <path d="M42 66 Q50 72 58 66" stroke="#221D15" stroke-width="4" fill="none" stroke-linecap="round"/>
+      <circle cx="26" cy="61" r="5" fill="#FF8FB1" opacity=".85"/>
+      <circle cx="74" cy="61" r="5" fill="#FF8FB1" opacity=".85"/>
+      <path d="M86 2 L97 16 L88 18 L83 25 L77 21 L85 16 Z" fill="#fff" stroke="#221D15" stroke-width="4" stroke-linejoin="round"/>
+    </symbol>
+
+    <!-- Q版头像:Claude Code 小克(漫画橙机器人+太阳花天线) -->
+    <symbol id="av-claude" viewBox="0 0 100 100">
+      <rect x="5" y="14" width="90" height="82" rx="22" fill="var(--agent)" stroke="#221D15" stroke-width="5"/>
+      <rect x="0" y="40" width="12" height="26" rx="5" fill="var(--agent)" stroke="#221D15" stroke-width="4"/>
+      <rect x="88" y="40" width="12" height="26" rx="5" fill="var(--agent)" stroke="#221D15" stroke-width="4"/>
+      <line x1="50" y1="14" x2="50" y2="6" stroke="#221D15" stroke-width="5"/>
+      <use href="#burst" x="35" y="-9" width="30" height="30" color="#FFC531"/>
+      <rect x="20" y="30" width="60" height="46" rx="13" fill="#fff" stroke="#221D15" stroke-width="4"/>
+      <circle cx="36" cy="51" r="7.5" fill="#221D15"/>
+      <circle cx="64" cy="51" r="7.5" fill="#221D15"/>
+      <circle cx="38.5" cy="48.5" r="2.6" fill="#fff"/>
+      <circle cx="66.5" cy="48.5" r="2.6" fill="#fff"/>
+      <path d="M40 66 Q50 74 60 66" stroke="#221D15" stroke-width="4" fill="none" stroke-linecap="round"/>
+      <circle cx="25" cy="61" r="5" fill="#FF8FB1" opacity=".85"/>
+      <circle cx="75" cy="61" r="5" fill="#FF8FB1" opacity=".85"/>
+    </symbol>
+
+    <!-- Q版头像:Codex 码星人(电光青机器人+护目镜+闪电天线) -->
+    <symbol id="av-codex" viewBox="0 0 100 100">
+      <rect x="5" y="14" width="90" height="82" rx="22" fill="var(--agent)" stroke="#221D15" stroke-width="5"/>
+      <rect x="0" y="40" width="12" height="26" rx="5" fill="var(--agent)" stroke="#221D15" stroke-width="4"/>
+      <rect x="88" y="40" width="12" height="26" rx="5" fill="var(--agent)" stroke="#221D15" stroke-width="4"/>
+      <line x1="50" y1="14" x2="50" y2="4" stroke="#221D15" stroke-width="5"/>
+      <use href="#bolt" x="38" y="-7" width="24" height="24" color="#FFC531"/>
+      <rect x="20" y="30" width="60" height="46" rx="13" fill="#fff" stroke="#221D15" stroke-width="4"/>
+      <rect x="27" y="44" width="46" height="17" rx="8.5" fill="#221D15"/>
+      <circle cx="40" cy="52.5" r="3" fill="#fff"/>
+      <circle cx="60" cy="52.5" r="3" fill="#fff"/>
+      <path d="M40 66 Q50 71 61 62" stroke="#221D15" stroke-width="4" fill="none" stroke-linecap="round"/>
+      <circle cx="25" cy="61" r="5" fill="#FF8FB1" opacity=".85"/>
+      <circle cx="75" cy="61" r="5" fill="#FF8FB1" opacity=".85"/>
+    </symbol>
+
+    <!-- Q版头像:DeepSeek Harness 鲸酱(弹力紫小鲸鱼) -->
+    <symbol id="av-dsh" viewBox="0 0 100 100">
+      <circle cx="50" cy="4" r="6" fill="#00C2DC" stroke="#221D15" stroke-width="3.5"/>
+      <circle cx="62" cy="1" r="4.5" fill="#00C2DC" stroke="#221D15" stroke-width="3"/>
+      <circle cx="74" cy="5" r="3.2" fill="#00C2DC" stroke="#221D15" stroke-width="3"/>
+      <path d="M18 60 L3 44 Q-2 58 3 62 L9 72 L17 70 Z" fill="var(--agent)" stroke="#221D15" stroke-width="4.5" stroke-linejoin="round"/>
+      <ellipse cx="52" cy="58" rx="37" ry="27" fill="var(--agent)" stroke="#221D15" stroke-width="5"/>
+      <ellipse cx="48" cy="69" rx="20" ry="10.5" fill="#fff" stroke="#221D15" stroke-width="3"/>
+      <path d="M42 32 Q46 24 50 32 L58 32 Q62 24 66 32 Z" fill="var(--agent)" stroke="#221D15" stroke-width="4" stroke-linejoin="round"/>
+      <circle cx="70" cy="50" r="5.5" fill="#221D15"/>
+      <circle cx="72" cy="48" r="2" fill="#fff"/>
+      <path d="M62 66 Q70 73 80 64" stroke="#221D15" stroke-width="4" fill="none" stroke-linecap="round"/>
+      <circle cx="36" cy="56" r="5" fill="#FF8FB1" opacity=".8"/>
+    </symbol>
+  </defs>
+</svg>
+
+<!-- 页边涂鸦 -->
+<svg class="doodle d1" aria-hidden="true"><use href="#burst"/></svg>
+<svg class="doodle d2" aria-hidden="true"><use href="#spark4"/></svg>
+<svg class="doodle d3" aria-hidden="true"><use href="#burst"/></svg>
+<svg class="doodle d4" aria-hidden="true"><use href="#spark4"/></svg>
+<svg class="doodle d5" aria-hidden="true"><use href="#burst"/></svg>
+
+<!-- ============ 顶部栏 ============ -->
+<header class="topbar">
+  <div class="brand">
+    <h1 class="wordmark" aria-label="OPENHARNESS">
+      <span style="--c:var(--red);--r:-3deg">O</span><span style="--c:var(--yellow);--r:2deg">P</span><span style="--c:var(--cyan);--r:-2deg">E</span><span style="--c:var(--purple);--r:3deg">N</span><span style="--c:var(--red);--r:-2deg">H</span><span style="--c:var(--yellow);--r:2deg">A</span><span style="--c:var(--cyan);--r:-3deg">R</span><span style="--c:var(--purple);--r:2deg">N</span><span style="--c:var(--red);--r:-2deg">E</span><span style="--c:var(--yellow);--r:3deg">S</span><span style="--c:var(--cyan);--r:-2deg">S</span>
+    </h1>
+    <span class="beta-sticker" title="BETA">
+      <svg aria-hidden="true"><use href="#burst"/></svg>
+      <b>BETA</b>
+    </span>
+  </div>
+  <div class="topbar-right">
+    <span class="chip status-chip"><span class="dot"></span>已连接 · 本机</span>
+    <span class="clock-chip mono" id="clock" aria-label="当前时间">14:32:07</span>
+    <button class="btn btn-primary btn-lg" id="open-drawer" aria-haspopup="dialog" aria-expanded="true" aria-controls="drawer">🚀 发任务</button>
+  </div>
+</header>
+
+<!-- ============ 主体 ============ -->
+<main class="layout">
+
+  <!-- 左列:4 张 Agent 卡 -->
+  <aside class="agents" aria-label="Agent 状态">
+    <h2 class="aside-title">特工小队
+      <svg class="squig" aria-hidden="true"><use href="#squig"/></svg>
+    </h2>
+
+    <!-- Cursor:运行中 -->
+    <article class="agent-card speedlines is-running" data-agent="cursor" id="card-cursor">
+      <div class="ac-top">
+        <div class="avatar-wrap"><svg class="avatar" role="img" aria-label="Cursor 头像" style="--agent:var(--cursor-c)"><use href="#av-cursor"/></svg></div>
+        <div class="ac-id">
+          <h3 class="ac-name">CURSOR</h3>
+          <p class="ac-role">光标侠 · 编辑器内改文件</p>
+        </div>
+        <span class="sticker-run">RUN!</span>
+      </div>
+      <p class="bubble ac-status tail-l">正在改 src/config.ts,别催我啦!</p>
+      <div class="ac-stats">
+        <div class="stat"><b class="mono">128</b><span>会话</span></div>
+        <div class="stat"><b class="mono">42</b><span>任务</span></div>
+      </div>
+      <div class="sparkbar">
+        <span class="sb-label">信号火花</span>
+        <div class="sparks" role="img" aria-label="信号强度 7/10">
+          <svg class="spark"><use href="#star"/></svg><svg class="spark"><use href="#star"/></svg><svg class="spark"><use href="#star"/></svg><svg class="spark"><use href="#star"/></svg><svg class="spark"><use href="#star"/></svg><svg class="spark tw"><use href="#star"/></svg><svg class="spark tw t2"><use href="#star"/></svg><svg class="spark off"><use href="#star"/></svg><svg class="spark off"><use href="#star"/></svg><svg class="spark off"><use href="#star"/></svg>
+        </div>
+      </div>
+    </article>
+
+    <!-- Claude Code:待命 -->
+    <article class="agent-card" data-agent="claude" id="card-claude">
+      <div class="ac-top">
+        <div class="avatar-wrap"><svg class="avatar" role="img" aria-label="Claude Code 头像" style="--agent:var(--claude-c)"><use href="#av-claude"/></svg></div>
+        <div class="ac-id">
+          <h3 class="ac-name">CLAUDE</h3>
+          <p class="ac-role">小克 · 工程编排担当</p>
+        </div>
+        <span class="sticker-ok">OK</span>
+      </div>
+      <p class="bubble ac-status tail-l">待命!有工程活喊我就行~</p>
+      <div class="ac-stats">
+        <div class="stat"><b class="mono">87</b><span>会话</span></div>
+        <div class="stat"><b class="mono">31</b><span>任务</span></div>
+      </div>
+      <div class="sparkbar">
+        <span class="sb-label">信号火花</span>
+        <div class="sparks" role="img" aria-label="信号强度 3/10">
+          <svg class="spark"><use href="#star"/></svg><svg class="spark tw"><use href="#star"/></svg><svg class="spark tw t2"><use href="#star"/></svg><svg class="spark off"><use href="#star"/></svg><svg class="spark off"><use href="#star"/></svg><svg class="spark off"><use href="#star"/></svg><svg class="spark off"><use href="#star"/></svg><svg class="spark off"><use href="#star"/></svg><svg class="spark off"><use href="#star"/></svg><svg class="spark off"><use href="#star"/></svg>
+        </div>
+      </div>
+    </article>
+
+    <!-- Codex:未接入 -->
+    <article class="agent-card is-offline" data-agent="codex" id="card-codex">
+      <div class="ac-top">
+        <div class="avatar-wrap"><svg class="avatar" role="img" aria-label="Codex 头像" style="--agent:var(--codex-c)"><use href="#av-codex"/></svg></div>
+        <div class="ac-id">
+          <h3 class="ac-name">CODEX</h3>
+          <p class="ac-role">码星人 · 沙箱实验员</p>
+        </div>
+        <span class="sticker-off">OFFLINE</span>
+      </div>
+      <p class="bubble ac-status tail-l">还没接入…去配置页把 API Key 连上我!</p>
+      <div class="ac-stats">
+        <div class="stat"><b class="mono">12</b><span>会话</span></div>
+        <div class="stat"><b class="mono">3</b><span>任务</span></div>
+      </div>
+      <div class="sparkbar">
+        <span class="sb-label">信号火花</span>
+        <div class="sparks" role="img" aria-label="未接入,无信号">
+          <svg class="spark off"><use href="#star"/></svg><svg class="spark off"><use href="#star"/></svg><svg class="spark off"><use href="#star"/></svg><svg class="spark off"><use href="#star"/></svg><svg class="spark off"><use href="#star"/></svg><svg class="spark off"><use href="#star"/></svg><svg class="spark off"><use href="#star"/></svg><svg class="spark off"><use href="#star"/></svg><svg class="spark off"><use href="#star"/></svg><svg class="spark off"><use href="#star"/></svg>
+        </div>
+      </div>
+    </article>
+
+    <!-- DeepSeek Harness:运行中 -->
+    <article class="agent-card speedlines is-running" data-agent="dsh" id="card-dsh">
+      <div class="ac-top">
+        <div class="avatar-wrap"><svg class="avatar" role="img" aria-label="DeepSeek Harness 头像" style="--agent:var(--dsh-c)"><use href="#av-dsh"/></svg></div>
+        <div class="ac-id">
+          <h3 class="ac-name">DEEPSEEK</h3>
+          <p class="ac-role">鲸酱 · 长思考深度复盘</p>
+        </div>
+        <span class="sticker-run">RUN!</span>
+      </div>
+      <p class="bubble ac-status tail-l">第 2 幕:漫画化改造进行中…</p>
+      <div class="ac-stats">
+        <div class="stat"><b class="mono">45</b><span>会话</span></div>
+        <div class="stat"><b class="mono">19</b><span>任务</span></div>
+      </div>
+      <div class="sparkbar">
+        <span class="sb-label">信号火花</span>
+        <div class="sparks" role="img" aria-label="信号强度 9/10">
+          <svg class="spark"><use href="#star"/></svg><svg class="spark"><use href="#star"/></svg><svg class="spark"><use href="#star"/></svg><svg class="spark"><use href="#star"/></svg><svg class="spark"><use href="#star"/></svg><svg class="spark"><use href="#star"/></svg><svg class="spark"><use href="#star"/></svg><svg class="spark"><use href="#star"/></svg><svg class="spark tw t3"><use href="#star"/></svg><svg class="spark off"><use href="#star"/></svg>
+        </div>
+      </div>
+    </article>
+  </aside>
+
+  <!-- 右列:标签页 + 面板 -->
+  <section class="main" aria-label="主面板">
+    <nav class="tabs" role="tablist" aria-label="主导航">
+      <button class="tab" role="tab" aria-selected="true" data-panel="panel-activity">📡 活动流</button>
+      <button class="tab" role="tab" aria-selected="false" data-panel="panel-sessions">📚 会话索引</button>
+      <button class="tab" role="tab" aria-selected="false" data-panel="panel-usage">📊 用量</button>
+      <button class="tab" role="tab" aria-selected="false" data-panel="panel-config">⚙️ 配置</button>
+      <button class="btn btn-ghost btn-sm tab-pano" id="panorama" aria-pressed="false">📖 全景展示</button>
+    </nav>
+
+    <div class="panels" id="panels">
+
+      <!-- ===== 活动流 ===== -->
+      <section class="panel active" id="panel-activity" role="tabpanel" aria-label="活动流">
+        <div class="panel-head">
+          <h2 class="sec-title">实时活动流
+            <svg class="squig" aria-hidden="true"><use href="#squig"/></svg>
+          </h2>
+          <span class="chip live">● LIVE</span>
+          <span class="spacer"></span>
+          <button class="btn btn-sm" id="sim-event">⚡ 模拟事件</button>
+        </div>
+        <div class="stream" id="stream" aria-live="polite">
+
+          <article class="event slide-in" data-agent="dsh" style="animation-delay:.15s">
+            <time class="ev-time mono">14:32:07</time>
+            <span class="ev-agent" data-agent="dsh">DEEPSEEK</span>
+            <span class="ev-type ev-task">TASK_START</span>
+            <p class="bubble ev-msg no-tail">收到任务:把配置模块改成漫画风 🎨</p>
+          </article>
+
+          <article class="event" data-agent="cursor">
+            <time class="ev-time mono">14:31:52</time>
+            <span class="ev-agent" data-agent="cursor">CURSOR</span>
+            <span class="ev-type ev-file">FILE_EDIT</span>
+            <p class="bubble ev-msg no-tail">已打开 src/config.ts,准备替换配色变量</p>
+          </article>
+
+          <article class="event" data-agent="claude">
+            <time class="ev-time mono">14:31:18</time>
+            <span class="ev-agent" data-agent="claude">CLAUDE</span>
+            <span class="ev-type ev-think">THINK</span>
+            <p class="bubble ev-msg no-tail">我在思考:描边 3px 还是 4px 更有手绘感…</p>
+          </article>
+
+          <article class="event" data-agent="codex">
+            <time class="ev-time mono">14:30:44</time>
+            <span class="ev-agent" data-agent="codex">CODEX</span>
+            <span class="ev-type ev-out">OUTPUT</span>
+            <p class="bubble ev-msg no-tail">生成 design/tokens.css:16 个颜色令牌 ✓</p>
+          </article>
+
+          <article class="event" data-agent="cursor">
+            <time class="ev-time mono">14:30:02</time>
+            <span class="ev-agent" data-agent="cursor">CURSOR</span>
+            <span class="ev-type ev-done">DONE</span>
+            <p class="bubble ev-msg no-tail">会话 #4821 完成,7 个文件已修改</p>
+          </article>
+
+          <article class="event" data-agent="codex">
+            <time class="ev-time mono">14:29:31</time>
+            <span class="ev-agent" data-agent="codex">CODEX</span>
+            <span class="ev-type ev-error">ERROR</span>
+            <p class="bubble ev-msg no-tail">依赖安装失败:网络波动,已安排重试</p>
+          </article>
+
+        </div>
+      </section>
+
+      <div class="exp-div"><div class="strip">— 下一页 —</div></div>
+
+      <!-- ===== 会话索引 ===== -->
+      <section class="panel" id="panel-sessions" role="tabpanel" aria-label="会话索引" hidden>
+        <div class="panel-head">
+          <h2 class="sec-title">会话索引
+            <svg class="squig" aria-hidden="true"><use href="#squig"/></svg>
+          </h2>
+          <span class="chip">4 个会话</span>
+        </div>
+        <div class="sess-toolbar">
+          <div class="search-wrap">
+            <svg aria-hidden="true"><use href="#spark4"/></svg>
+            <input class="inp" type="search" placeholder="搜索会话 / 项目 / Agent…" aria-label="搜索会话">
+          </div>
+          <div class="filter-chips">
+            <button class="chip-btn on">全部</button>
+            <button class="chip-btn">进行中</button>
+            <button class="chip-btn">今天</button>
+            <button class="chip-btn">本周</button>
+          </div>
+        </div>
+        <div class="sess-list">
+
+          <article class="sess speedlines">
+            <span class="sid mono">#4821</span>
+            <div>
+              <p class="sess-title">openharness 漫画化改造</p>
+              <p class="sess-meta"><span class="chip">DSH</span>第 2 幕 · 配色令牌替换</p>
+            </div>
+            <span class="msgs">142 条</span>
+            <span class="sess-time">今天 14:20</span>
+            <span class="sess-status doing">进行中!</span>
+          </article>
+
+          <article class="sess">
+            <span class="sid mono">#4820</span>
+            <div>
+              <p class="sess-title">配置模块重构</p>
+              <p class="sess-meta"><span class="chip">CURSOR</span>src/config.ts</p>
+            </div>
+            <span class="msgs">87 条</span>
+            <span class="sess-time">今天 11:02</span>
+            <span class="sess-status done">完成</span>
+          </article>
+
+          <article class="sess">
+            <span class="sid mono">#4818</span>
+            <div>
+              <p class="sess-title">用量统计条形图</p>
+              <p class="sess-meta"><span class="chip">CODEX</span>沙箱实验</p>
+            </div>
+            <span class="msgs">56 条</span>
+            <span class="sess-time">昨天 18:44</span>
+            <span class="sess-status done">完成</span>
+          </article>
+
+          <article class="sess">
+            <span class="sid mono">#4809</span>
+            <div>
+              <p class="sess-title">CLI 适配器调试</p>
+              <p class="sess-meta"><span class="chip">CLAUDE</span>hook 流水线</p>
+            </div>
+            <span class="msgs">231 条</span>
+            <span class="sess-time">07-31 09:15</span>
+            <span class="sess-status done">完成</span>
+          </article>
+
+        </div>
+
+        <!-- 空状态展示 -->
+        <div class="empty">
+          <svg class="empty-face" role="img" aria-label="手绘小表情:没有找到会话">
+            <circle cx="42" cy="46" r="34" fill="#fff" stroke="#221D15" stroke-width="4"/>
+            <ellipse cx="42" cy="86" rx="30" ry="6" fill="rgba(34,29,21,.10)"/>
+            <circle cx="30" cy="42" r="3.4" fill="#221D15"/>
+            <circle cx="54" cy="42" r="3.4" fill="#221D15"/>
+            <path d="M30 60 Q42 53 54 60" fill="none" stroke="#221D15" stroke-width="3.5" stroke-linecap="round"/>
+            <path d="M62 22 q6 -2 3 -9 q-4 4 -8 1 z" fill="#3D8BFF" stroke="#221D15" stroke-width="2.5" stroke-linejoin="round"/>
+            <circle cx="20" cy="56" r="5" fill="#FF8FB1" opacity=".7"/>
+            <circle cx="64" cy="56" r="5" fill="#FF8FB1" opacity=".7"/>
+          </svg>
+          <p class="bubble no-tail">搜「漫画」没有结果哦~ 这里空空如也,连风都没吹过!</p>
+          <p class="hint">换个关键词,或者去发个新任务,让特工们动起来</p>
+          <button class="btn btn-primary" id="empty-go">🚀 去发个任务</button>
+        </div>
+      </section>
+
+      <div class="exp-div"><div class="strip">— 下一页 —</div></div>
+
+      <!-- ===== 用量 ===== -->
+      <section class="panel" id="panel-usage" role="tabpanel" aria-label="用量" hidden>
+        <div class="panel-head">
+          <h2 class="sec-title">用量统计
+            <svg class="squig" aria-hidden="true"><use href="#squig"/></svg>
+          </h2>
+          <span class="chip">今日 · 2025-08-15</span>
+        </div>
+
+        <div class="stat-grid">
+          <div class="stat-card" style="--c:var(--red)">
+            <svg class="sc-spark" aria-hidden="true"><use href="#spark4"/></svg>
+            <p class="sc-label">今日任务</p>
+            <p class="sc-num">12<small>个</small></p>
+            <p class="sc-sub">较昨日 +3 · 其中 2 个进行中</p>
+          </div>
+          <div class="stat-card hl">
+            <span class="sc-mvp">本周 MVP</span>
+            <svg class="sc-spark" aria-hidden="true"><use href="#spark4"/></svg>
+            <p class="sc-label">Token 消耗</p>
+            <p class="sc-num">128.4<small>K</small></p>
+            <p class="sc-sub">Cursor 部分为估算值</p>
+          </div>
+          <div class="stat-card" style="--c:var(--cyan)">
+            <svg class="sc-spark" aria-hidden="true"><use href="#spark4"/></svg>
+            <p class="sc-label">活跃时长</p>
+            <p class="sc-num">6.5<small>h</small></p>
+            <p class="sc-sub">DeepSeek 占 3.2h · 最深思考 41 分钟</p>
+          </div>
+        </div>
+
+        <div class="chart-grid">
+          <div class="chart-card">
+            <h3 class="chart-title" style="--c:var(--red)">
+              <svg aria-hidden="true"><use href="#burst"/></svg>按工具 · Token
+            </h3>
+            <div class="hbar-list">
+              <div class="hbar">
+                <span class="hbar-label"><span class="dot" style="--c:var(--cursor-c)"></span>Cursor</span>
+                <div class="hbar-track"><div class="hbar-fill fill-dots" style="--c:var(--cursor-c);width:92%"></div></div>
+                <span class="hbar-val">54.2K</span>
+              </div>
+              <div class="hbar">
+                <span class="hbar-label"><span class="dot" style="--c:var(--claude-c)"></span>Claude Code</span>
+                <div class="hbar-track"><div class="hbar-fill fill-dots" style="--c:var(--claude-c);width:61%"></div></div>
+                <span class="hbar-val">36.1K</span>
+              </div>
+              <div class="hbar">
+                <span class="hbar-label"><span class="dot" style="--c:var(--codex-c)"></span>Codex</span>
+                <div class="hbar-track"><div class="hbar-fill fill-dots" style="--c:var(--codex-c);width:35%"></div></div>
+                <span class="hbar-val">20.4K</span>
+              </div>
+              <div class="hbar">
+                <span class="hbar-label"><span class="dot" style="--c:var(--dsh-c)"></span>DeepSeek</span>
+                <div class="hbar-track"><div class="hbar-fill fill-dots" style="--c:var(--dsh-c);width:30%"></div></div>
+                <span class="hbar-val">17.7K</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="chart-card">
+            <h3 class="chart-title" style="--c:var(--cyan)">
+              <svg aria-hidden="true"><use href="#burst"/></svg>按天 · 任务数
+            </h3>
+            <div class="vchart">
+              <div class="vbar">
+                <div class="vbar-fill fill-dots" style="--c:var(--red);--h:46%"><span class="vval">6</span></div>
+                <span class="vbar-day">周一</span>
+              </div>
+              <div class="vbar">
+                <div class="vbar-fill fill-dots" style="--c:var(--yellow);--h:72%"><span class="vval">9</span></div>
+                <span class="vbar-day">周二</span>
+              </div>
+              <div class="vbar">
+                <div class="vbar-fill fill-dots" style="--c:var(--cyan);--h:60%"><span class="vval">8</span></div>
+                <span class="vbar-day">周三</span>
+              </div>
+              <div class="vbar">
+                <div class="vbar-fill fill-dots" style="--c:var(--purple);--h:84%"><span class="vval">11</span></div>
+                <span class="vbar-day">周四</span>
+              </div>
+              <div class="vbar">
+                <div class="vbar-fill fill-dots" style="--c:var(--red);--h:100%"><span class="vval">14</span>
+                  <svg class="vburst" aria-hidden="true"><use href="#burst"/></svg>
+                </div>
+                <span class="vbar-day">今天</span>
+              </div>
+              <div class="vbar">
+                <div class="vbar-fill fill-dots" style="--c:var(--green);--h:34%"><span class="vval">4</span></div>
+                <span class="vbar-day">周六</span>
+              </div>
+              <div class="vbar">
+                <div class="vbar-fill fill-dots" style="--c:var(--blue);--h:22%"><span class="vval">3</span></div>
+                <span class="vbar-day">周日</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="chart-card full">
+            <h3 class="chart-title" style="--c:var(--purple)">
+              <svg aria-hidden="true"><use href="#burst"/></svg>按项目 · 任务数
+            </h3>
+            <div class="hbar-list">
+              <div class="hbar">
+                <span class="hbar-label"><span class="dot" style="--c:var(--yellow)"></span>openharness-web</span>
+                <div class="hbar-track"><div class="hbar-fill fill-dots" style="--c:var(--yellow);width:88%"></div></div>
+                <span class="hbar-val">22</span>
+              </div>
+              <div class="hbar">
+                <span class="hbar-label"><span class="dot" style="--c:var(--cyan)"></span>agent-runtime</span>
+                <div class="hbar-track"><div class="hbar-fill fill-dots" style="--c:var(--cyan);width:60%"></div></div>
+                <span class="hbar-val">15</span>
+              </div>
+              <div class="hbar">
+                <span class="hbar-label"><span class="dot" style="--c:var(--purple)"></span>dsh-sessions</span>
+                <div class="hbar-track"><div class="hbar-fill fill-dots" style="--c:var(--purple);width:36%"></div></div>
+                <span class="hbar-val">9</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="exp-div"><div class="strip">— 下一页 —</div></div>
+
+      <!-- ===== 配置 ===== -->
+      <section class="panel" id="panel-config" role="tabpanel" aria-label="配置" hidden>
+        <div class="panel-head">
+          <h2 class="sec-title">配置
+            <svg class="squig" aria-hidden="true"><use href="#squig"/></svg>
+          </h2>
+          <span class="chip">凭据只读 · 不复制不迁移</span>
+        </div>
+
+        <div class="cfg-grid">
+          <div class="cfg-card">
+            <h3 style="--c:var(--red)"><svg aria-hidden="true"><use href="#burst"/></svg>Agent 凭据(只读)</h3>
+            <div class="cfg-row">
+              <div class="label">Cursor</div>
+              <span class="key-chip mono">sk-••••••••7F3A</span>
+              <span class="ok-chip">✓ 有效</span>
+            </div>
+            <div class="cfg-row">
+              <div class="label">Claude Code</div>
+              <span class="key-chip mono">sk-ant-••••••••9C2E</span>
+              <span class="ok-chip">✓ 有效</span>
+            </div>
+            <div class="cfg-row">
+              <div class="label">Codex</div>
+              <span class="key-chip mono">—</span>
+              <span class="bad-chip">未配置</span>
+            </div>
+            <div class="cfg-row">
+              <div class="label">DeepSeek Harness</div>
+              <span class="key-chip mono">dsh-••••••••41B8</span>
+              <span class="ok-chip">✓ 有效</span>
+            </div>
+          </div>
+
+          <div class="cfg-card">
+            <h3 style="--c:var(--cyan)"><svg aria-hidden="true"><use href="#burst"/></svg>外观主题</h3>
+            <div class="theme-chips">
+              <button class="chip-btn on">🎨 漫画模式</button>
+              <button class="chip-btn">📄 经典</button>
+              <button class="chip-btn">🌙 夜间</button>
+            </div>
+            <h3 style="--c:var(--green);margin-top:16px"><svg aria-hidden="true"><use href="#burst"/></svg>通知</h3>
+            <label class="star-check">
+              <input type="checkbox" checked><svg class="starc" aria-hidden="true"><use href="#star"/></svg>
+              <span class="sc-text">事件火花动画<small>事件进来时点亮 Agent 卡的火花条</small></span>
+              <span class="sc-state">开</span>
+            </label>
+            <label class="star-check">
+              <input type="checkbox" checked><svg class="starc" aria-hidden="true"><use href="#star"/></svg>
+              <span class="sc-text">任务完成通知<small>任务结束时弹出「大功告成!」气泡</small></span>
+              <span class="sc-state">开</span>
+            </label>
+            <label class="star-check">
+              <input type="checkbox"><svg class="starc" aria-hidden="true"><use href="#star"/></svg>
+              <span class="sc-text">错误警报音<small>出错时来一声漫画式「砰!」</small></span>
+              <span class="sc-state">关</span>
+            </label>
+          </div>
+
+          <div class="cfg-card full" style="grid-column:1/-1">
+            <h3 style="--c:var(--purple)"><svg aria-hidden="true"><use href="#burst"/></svg>快捷键</h3>
+            <div class="kbd-list">
+              <div class="kbd-row"><span class="kbd">⌘ K</span><span>打开命令面板</span></div>
+              <div class="kbd-row"><span class="kbd">⌘ ↵</span><span>发射当前任务</span></div>
+              <div class="kbd-row"><span class="kbd">⌘ 1-4</span><span>切换 Agent 卡片焦点</span></div>
+            </div>
+            <div style="margin-top:14px">
+              <button class="btn btn-primary">💾 保存修改</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </section>
+</main>
+
+<!-- ============ 页脚 ============ -->
+<footer class="foot">
+  <p class="fin">— 本回完 —</p>
+  <p class="tbc">TO BE CONTINUED <svg style="width:34px;height:34px;color:var(--yellow)" aria-hidden="true"><use href="#burst"/></svg></p>
+  <p class="caption">OPENHARNESS × 漫画化设计稿 v1.0 · 单文件 · 零外部依赖 · 仅供演示</p>
+</footer>
+
+<!-- ============ 发任务抽屉(演示:默认展开) ============ -->
+<div class="drawer-backdrop" id="drawer-backdrop"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="发任务抽屉">
+  <div class="drawer-head">
+    <svg class="burst" aria-hidden="true"><use href="#burst"/></svg>
+    <h2>发射任务</h2>
+    <span class="demo-chip">演示:默认展开,可 ✕ 收起</span>
+    <button class="icon-btn" id="close-drawer" aria-label="关闭抽屉">✕</button>
+  </div>
+
+  <div class="drawer-body">
+
+    <div>
+      <p class="field-label" style="--c:var(--red)"><svg aria-hidden="true"><use href="#burst"/></svg>选个特工 <span class="req">*</span></p>
+      <div class="agent-opts" role="group" aria-label="选择 Agent">
+        <button class="agent-opt selected" data-agent="cursor">
+          <svg class="avatar mini" aria-hidden="true" style="--agent:var(--cursor-c)"><use href="#av-cursor"/></svg>
+          <span><span class="ao-name">CURSOR</span><span class="ao-tag">编辑器内修改</span></span>
+        </button>
+        <button class="agent-opt" data-agent="claude">
+          <svg class="avatar mini" aria-hidden="true" style="--agent:var(--claude-c)"><use href="#av-claude"/></svg>
+          <span><span class="ao-name">CLAUDE</span><span class="ao-tag">工程编排</span></span>
+        </button>
+        <button class="agent-opt" data-agent="codex">
+          <svg class="avatar mini" aria-hidden="true" style="--agent:var(--codex-c)"><use href="#av-codex"/></svg>
+          <span><span class="ao-name">CODEX</span><span class="ao-tag">沙箱实验</span></span>
+        </button>
+        <button class="agent-opt" data-agent="dsh">
+          <svg class="avatar mini" aria-hidden="true" style="--agent:var(--dsh-c)"><use href="#av-dsh"/></svg>
+          <span><span class="ao-name">DEEPSEEK</span><span class="ao-tag">深度复盘</span></span>
+        </button>
+      </div>
+    </div>
+
+    <div>
+      <p class="field-label" style="--c:var(--cyan)"><svg aria-hidden="true"><use href="#spark4"/></svg>工作目录 <span class="req">*</span></p>
+      <div class="dir-row">
+        <input class="inp" type="text" value="/Users/liuziying/Projects/OpenHarness" aria-label="工作目录">
+        <button class="btn">📁 浏览</button>
+      </div>
+    </div>
+
+    <div>
+      <p class="field-label" style="--c:var(--purple)"><svg aria-hidden="true"><use href="#spark4"/></svg>任务描述 <span class="req">*</span></p>
+      <textarea class="inp" placeholder="描述一下任务,比如:把配置页也改成漫画风,配色对齐 design/tokens…"></textarea>
+    </div>
+
+    <label class="star-check">
+      <input type="checkbox"><svg class="starc" aria-hidden="true"><use href="#star"/></svg>
+      <span class="sc-text">排队执行<small>有空闲 Agent 时自动启动(v0.2)</small></span>
+    </label>
+
+    <div class="sug-wrap">
+      <p class="sug-title"><svg aria-hidden="true"><use href="#burst"/></svg>按特色匹配的建议</p>
+      <button class="sug-card" data-agent="cursor" style="--agent:var(--cursor-c)">
+        <span class="sug-ribbon">推荐 ①</span>
+        <div class="sug-head">
+          <svg class="avatar mini" aria-hidden="true" style="--agent:var(--cursor-c)"><use href="#av-cursor"/></svg>
+          <b>CURSOR</b>
+        </div>
+        <p class="sug-reason">「界面样式微调」→ 编辑器里直接改,所见即所得</p>
+        <div class="sug-tags"><span>界面微调</span><span>快速反馈</span></div>
+      </button>
+      <button class="sug-card" data-agent="claude" style="--agent:var(--claude-c)">
+        <span class="sug-ribbon">推荐 ②</span>
+        <div class="sug-head">
+          <svg class="avatar mini" aria-hidden="true" style="--agent:var(--claude-c)"><use href="#av-claude"/></svg>
+          <b>CLAUDE</b>
+        </div>
+        <p class="sug-reason">「多步编排 + hook 流水线」→ 工程感任务它最稳</p>
+        <div class="sug-tags"><span>工程编排</span><span>hook</span><span>多步</span></div>
+      </button>
+      <button class="sug-card" data-agent="codex" style="--agent:var(--codex-c)">
+        <span class="sug-ribbon">推荐 ③</span>
+        <div class="sug-head">
+          <svg class="avatar mini" aria-hidden="true" style="--agent:var(--codex-c)"><use href="#av-codex"/></svg>
+          <b>CODEX</b>
+        </div>
+        <p class="sug-reason">「沙箱里跑实验脚本」→ 隔离环境,炸了也不怕</p>
+        <div class="sug-tags"><span>沙箱实验</span><span>脚本</span></div>
+      </button>
+    </div>
+
+  </div>
+
+  <div class="drawer-foot">
+    <button class="btn btn-primary btn-lg" id="launch">🚀 发射任务!</button>
+    <button class="btn btn-ghost" id="cancel-drawer">✕ 取消</button>
+  </div>
+</aside>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------- 时钟 ---------- */
+  var clock = document.getElementById("clock");
+  function pad(n){return String(n).padStart(2,"0")}
+  function tick(){
+    var d = new Date();
+    clock.textContent = pad(d.getHours())+":"+pad(d.getMinutes())+":"+pad(d.getSeconds());
+  }
+  tick(); setInterval(tick, 1000);
+
+  /* ---------- 标签页 ---------- */
+  var tabs = Array.prototype.slice.call(document.querySelectorAll(".tab[role=tab]"));
+  var panels = document.getElementById("panels");
+  function activate(name){
+    tabs.forEach(function(t){
+      var on = t.getAttribute("data-panel") === name;
+      t.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    document.querySelectorAll(".panel").forEach(function(p){
+      var on = p.id === name;
+      p.classList.toggle("active", on);
+      p.hidden = !on;
+    });
+    panels.classList.remove("expanded");
+    var pano = document.getElementById("panorama");
+    pano.setAttribute("aria-pressed","false");
+    pano.textContent = "📖 全景展示";
+  }
+  tabs.forEach(function(t){
+    t.addEventListener("click", function(){ activate(t.getAttribute("data-panel")); });
+  });
+
+  /* ---------- 全景展示 ---------- */
+  document.getElementById("panorama").addEventListener("click", function(){
+    var on = panels.classList.toggle("expanded");
+    this.setAttribute("aria-pressed", on ? "true" : "false");
+    this.textContent = on ? "🖥 标签页模式" : "📖 全景展示";
+    if(on){
+      document.querySelectorAll(".panel").forEach(function(p){ p.hidden = false; });
+    }else{
+      var active = document.querySelector('.tab[aria-selected="true"]');
+      activate(active ? active.getAttribute("data-panel") : "panel-activity");
+    }
+  });
+
+  /* ---------- 发任务抽屉 ---------- */
+  var drawer = document.getElementById("drawer");
+  var backdrop = document.getElementById("drawer-backdrop");
+  function openDrawer(){
+    drawer.classList.remove("closed");
+    backdrop.classList.remove("hidden");
+    document.getElementById("open-drawer").setAttribute("aria-expanded","true");
+    setTimeout(function(){ document.getElementById("close-drawer").focus(); }, 320);
+  }
+  function closeDrawer(){
+    drawer.classList.add("closed");
+    backdrop.classList.add("hidden");
+    document.getElementById("open-drawer").setAttribute("aria-expanded","false");
+  }
+  document.getElementById("open-drawer").addEventListener("click", openDrawer);
+  document.getElementById("close-drawer").addEventListener("click", closeDrawer);
+  document.getElementById("cancel-drawer").addEventListener("click", closeDrawer);
+  backdrop.addEventListener("click", closeDrawer);
+  document.getElementById("empty-go").addEventListener("click", openDrawer);
+  document.addEventListener("keydown", function(e){ if(e.key === "Escape") closeDrawer(); });
+
+  /* Agent 选择(抽屉内的四个特工 + 建议卡联动) */
+  var opts = Array.prototype.slice.call(document.querySelectorAll(".agent-opt"));
+  var sugs = Array.prototype.slice.call(document.querySelectorAll(".sug-card"));
+  function selectAgent(name){
+    opts.forEach(function(o){ o.classList.toggle("selected", o.getAttribute("data-agent") === name); });
+    sugs.forEach(function(s){ s.classList.toggle("selected", s.getAttribute("data-agent") === name); });
+  }
+  opts.forEach(function(o){
+    o.addEventListener("click", function(){ selectAgent(o.getAttribute("data-agent")); });
+  });
+  sugs.forEach(function(s){
+    s.addEventListener("click", function(){ selectAgent(s.getAttribute("data-agent")); });
+  });
+  document.getElementById("launch").addEventListener("click", function(){
+    var sel = document.querySelector(".agent-opt.selected");
+    var agent = sel ? sel.getAttribute("data-agent") : "cursor";
+    pushEvent({
+      agent:agent,
+      type:"TASK_START", cls:"ev-task",
+      msg:"🚀 任务已发射!特工进入战斗状态…"
+    });
+  });
+
+  /* ---------- 模拟事件(新事件滑入 + 点亮火花) ---------- */
+  var templates = [
+    {agent:"cursor", type:"FILE_EDIT",  cls:"ev-file",  msg:"已打开 src/config.ts,准备替换配色变量"},
+    {agent:"claude", type:"THINK",     cls:"ev-think", msg:"我在思考:描边 3px 还是 4px 更有手绘感…"},
+    {agent:"codex",  type:"OUTPUT",    cls:"ev-out",   msg:"生成 design/tokens.css:16 个颜色令牌 ✓"},
+    {agent:"dsh",    type:"TASK_START",cls:"ev-task",  msg:"收到任务:漫画化改造进入下一幕!"},
+    {agent:"cursor", type:"DONE",      cls:"ev-done",  msg:"会话 #4821 完成,7 个文件已修改"},
+    {agent:"codex",  type:"ERROR",     cls:"ev-error", msg:"依赖安装失败:网络波动,已安排重试"},
+    {agent:"claude", type:"OUTPUT",    cls:"ev-out",   msg:"hook 流水线跑完:4/4 通过,零报错"},
+    {agent:"dsh",    type:"THINK",     cls:"ev-think", msg:"复盘结论:把圆角改成不规则的更像手绘"}
+  ];
+  var names = {cursor:"CURSOR", claude:"CLAUDE", codex:"CODEX", dsh:"DEEPSEEK"};
+  var stream = document.getElementById("stream");
+
+  function pushEvent(ev){
+    var row = document.createElement("article");
+    row.className = "event slide-in";
+    row.setAttribute("data-agent", ev.agent);
+    var t = document.createElement("time");
+    t.className = "ev-time mono";
+    t.textContent = clock.textContent;
+    var a = document.createElement("span");
+    a.className = "ev-agent";
+    a.setAttribute("data-agent", ev.agent);
+    a.textContent = names[ev.agent];
+    var b = document.createElement("span");
+    b.className = "ev-type " + ev.cls;
+    b.textContent = ev.type;
+    var m = document.createElement("p");
+    m.className = "bubble ev-msg no-tail";
+    m.textContent = ev.msg;
+    row.appendChild(t); row.appendChild(a); row.appendChild(b); row.appendChild(m);
+    stream.insertBefore(row, stream.firstChild);
+    while(stream.children.length > 12){ stream.removeChild(stream.lastChild); }
+    popSpark(ev.agent);
+  }
+
+  /* 点亮对应 Agent 卡的一颗火花(全部点亮后重新计数) */
+  function popSpark(agent){
+    var card = document.getElementById("card-" + agent);
+    if(!card) return;
+    card.classList.remove("flash");
+    void card.offsetWidth; /* 重启动画 */
+    card.classList.add("flash");
+    var sparks = card.querySelectorAll(".spark");
+    var off = Array.prototype.slice.call(sparks).filter(function(s){ return s.classList.contains("off"); });
+    var target;
+    if(off.length){ target = off[0]; }
+    else{
+      sparks.forEach(function(s){
+        s.classList.add("off");
+        s.classList.remove("tw","t2","t3");
+      });
+      target = sparks[0];
+    }
+    target.classList.remove("off");
+    target.classList.remove("tw","t2","t3");
+    target.classList.add("pop");
+    setTimeout(function(){ target.classList.remove("pop"); }, 600);
+    var lit = card.querySelectorAll(".spark:not(.off)").length;
+    var bar = card.querySelector(".sparks");
+    bar.setAttribute("aria-label", "信号强度 " + lit + "/10");
+  }
+
+  document.getElementById("sim-event").addEventListener("click", function(){
+    var tpl = templates[Math.floor(Math.random() * templates.length)];
+    pushEvent({agent:tpl.agent, type:tpl.type, cls:tpl.cls, msg:tpl.msg});
+  });
+})();
+</script>
+
+<!--
+════════════════════════════════════════════════════════════════════
+OPENHARNESS 漫画化设计体系(供工程师移植 · 单文件设计稿 v1.0)
+════════════════════════════════════════════════════════════════════
+
+■ 一、配色(hex)
+  主色 6 个(漫画撞色):
+    --paper  #FFF3D6  纸色(页面底色,漫画原稿纸)
+    --paper-2 #FFFBF0  纸色亮面(白色漫画格/气泡/卡片底色)
+    --ink    #221D15  墨色(所有描边、正文文字,暖黑而非纯黑)
+    --red    #FF4433  番茄红(主强调/危险/错误)
+    --yellow #FFC531  漫画黄(主按钮/高亮/爆星)
+    --cyan   #00C2DC  电光青(信息/Codex)
+    --purple #8B4DFF  弹力紫(品牌强调/DeepSeek)
+  辅助色:
+    --green  #43D17C  在线/成功;  --blue #3D8BFF 信息/链接;
+    --pink   #FF8FB1  腮红/点缀;  --orange #FF9F1C 漫画橙
+  Agent 专属识别色(卡片顶条/头像/徽章/火花/图表柱):
+    Cursor = 番茄红 #FF4433
+    Claude Code = 漫画橙 #FF9F1C(贴近 Anthropic 珊瑚橙,深色文字可用墨色)
+    Codex = 电光青 #00C2DC
+    DeepSeek Harness = 弹力紫 #8B4DFF(贴近 DeepSeek 蓝紫)
+  文字对比规则:彩色底徽章上,黄/青/绿底用墨色字,红/紫/蓝底用白色字;
+  正文永远墨色 #221D15 落在白色/纸色面上(对比度 > 10:1)。
+
+■ 二、字体(推荐字体名,当前文件零外部依赖,靠字体栈兜底)
+  --font-hand  中文手绘感:
+    首选 "ZCOOL KuaiLe"(站酷快乐体,免费商用,手绘漫画感最强,用于标题/卡片名),
+    长正文可换 "LXGW WenKai"(霞鹜文楷,免费,手绘感+可读性);
+    兜底 "FZKaTong-M19S" → "YouYuan"(幼圆) → 系统 sans。
+  --font-comic 英文漫画粗体:
+    首选 "Bangers"(Google Fonts 免费,漫画拟声字/徽章/大数字/LOGO),
+    兜底 "Arial Black" → "Impact"。
+  --font-mono  数据等宽:
+    首选 "JetBrains Mono",兜底 "Cascadia Code"/"SF Mono"/"Menlo"/"Consolas"。
+  工程移植时:可通过 <link> 引入 Bangers + ZCOOL KuaiLe + JetBrains Mono,
+  本 mockup 故意不引,保证断网可看。
+
+■ 三、描边 / 圆角 / 阴影规范(手绘感三件套)
+  描边:全局统一 --line:3px solid var(--ink);细徽章 2.5px;
+        焦点态用 3px dashed var(--blue)、offset 3px(必须保留,键盘可达)。
+  圆角:故意不对称,模拟手绘的不规则感,例:
+        border-radius:16px 12px 18px 13px(大卡)、13px 9px 14px 10px(小卡)、
+        99px(胶囊徽章)、6px 4px 7px 5px(小徽章)。
+  阴影:一律硬偏移、零模糊(blur=0),例:
+        --sh-sm:3px 3px 0 var(--ink)、--sh-md:6px 6px 0、--sh-lg:9px 9px 0。
+        交互:hover 位移 translate(-1px,-2px)+阴影加大;
+        active 位移 translate(2px,2px)+阴影缩到 1px(按下漫画按钮的手感)。
+  旋转:卡片 ±0.5°~0.7°、徽章 ±1.5°、贴纸 ±5°~9°,勿超过 ±9°,
+        正文与表格一律不旋转(保可读性)。
+  动画:150–450ms,回弹缓动 cubic-bezier(.2,1.6,.4,1);
+        必须尊重 prefers-reduced-motion(全部禁用)。
+
+■ 四、网点纸纹理(纯 CSS radial-gradient)
+  页面底纹:
+    background-image:radial-gradient(circle, rgba(34,29,21,.05) 1px, transparent 1.35px);
+    background-size:12px 12px;  /* 疏网,铺在纸色底上 */
+  白色格内阴影区(标题带/页脚/抽屉):
+    rgba(34,29,21,.10~.16)、size 6~9px。
+  图表柱填充(网点叠加在纯色上,.fill-dots::after):
+    radial-gradient(circle, rgba(34,29,21,.20) 1px, transparent 1.3px); size 6px 6px。
+  做法要点:网点永远用「墨色低透明度」叠加,不换彩色,保证漫画印刷感统一。
+
+■ 五、每个组件的样式要点
+  1) 顶部栏:白色刊头,下边 4px 墨线 + 硬投影;LOGO 每个字母独立 span,
+     交替红/黄/青/紫,2px 墨色 text-stroke + paint-order:stroke fill +
+     3px 3px 0 硬文字阴影,每字母 rotate(±2~3deg);BETA 徽章 = 黄色爆炸星
+     + 12px Bangers 字母;连接状态 = 绿点 chip(steps() 闪烁);时钟 = 墨底白字
+     等宽 chip;「发任务」= 黄色大按钮。
+  2) Agent 卡:白色漫画格 + 顶部 12px Agent 色粗条 + 3px 墨描边 + 6px 硬阴影;
+     卡片间 ±0.7° 微旋转;头像为内联 SVG Q 版机器人/鲸鱼(描边 4-5px,
+     腮红粉圆点),颜色经 CSS 变量 --agent 注入;状态气泡 = 白底墨边气泡
+     带旋转方块尾巴;运行中卡片叠加集中线 background(repeating-conic-gradient,
+     rgba 墨色 0.14,4°/15° 间隔)+ 红色 RUN! 贴纸(摆动动画);
+     未接入卡片整体降饱和(灰底 + 头像 opacity .45 + grayscale .6);
+     统计用等宽大数字 + Agent 色。
+  3) 信号火花条(原 LED 表的漫画化):10 颗五角星 SVG,currentColor 注入
+     Agent 色;未点亮 = 白底浅棕描边;点亮 = Agent 色 + 墨描边 + popStar
+     弹跳动画(scale 0→1.35→1,rotate ±12°);常态 2-3 颗做低频率眨眼
+     (twinkle);新事件进来时,JS 点亮下一颗未亮星并给卡片加黄色描边闪烁。
+  4) 标签页:下边 3px 墨线为基准线,按钮上移 3px 骑线;选中态 = 墨底白字
+     前加 "★ " 黄星;「全景展示」按钮可把四个面板同时展开(供设计评审)。
+  5) 活动流:白色漫画格,max-height + 墨色粗滚动条(黄底墨边);
+     每行 = 等宽时间戳 + Agent 色徽章(旋转 -1.5°)+ 事件类型徽章
+     (Bangers 字体:黄=START/紫=THINK/青=FILE/绿=OUTPUT/蓝=DONE/红=ERROR)
+     + 白色消息气泡;行间 2px 虚线(漫画格子的分镜感);
+     新事件 slideIn 从右侧滑入(translateX(120%)→0 + 轻微旋转,450ms 回弹);
+     「模拟事件」按钮随机生成事件并联动火花条。
+  6) 发任务抽屉:右侧滑出,纸色网点底 + 左 4px 墨边 + 硬投影;
+     头尾白底墨线;特工选择 = 2×2 大头像按钮,选中黄底 + "✓ 选中!" 角标;
+     输入框 = 白底 3px 墨边 + inset 硬阴影,聚焦变纸色亮面 + 蓝色虚线焦点环;
+     排队执行 = 星形复选开关(checked 时星星变黄并 pop);
+     建议卡 = 白卡 + 红色/蓝色/绿色斜角丝带「推荐 ①②③」,点卡片同步
+     选中对应特工(联动真实评分逻辑的位置)。
+  7) 用量页:统计大卡 = 40px Bangers 彩色数字 + 角落闪光星 + 「本周 MVP」
+     斜贴纸;横向条形图 = Agent 色柱 + 网点叠加 + 墨描边右线 + 等宽数值;
+     纵向条形图 = 7 天循环漫画色,最高柱顶挂爆炸星;条形高度用
+     inline style --h/--w 注入(真实数据直接替换)。
+  8) 会话索引:搜索框(星形放大镜)+ 胶囊过滤 chip;行卡 = 5 列网格,
+     进行中行叠加集中线 + 「进行中!」黄底红字摆动贴纸,完成行绿色徽章;
+     hover 轻抬升。
+  9) 空状态:大对话气泡 + 内联 SVG 手绘小表情(点眼 + 波浪嘴 + 蓝色汗滴
+     + 粉腮红),配一句「邀请行动」文案 + 黄色主按钮(空状态要指向下一步)。
+  10) 配置页:只读凭据行(等宽掩码 chip + 绿 ✓ / 红「未配置」徽章);
+      主题选择胶囊;星形开关三连;快捷键 kbd 键帽(2.5px 墨边 +
+      5px 粗下边,像漫画键盘);保存按钮黄色。
+  11) 通用纪律:正文 ≥13px、行高 1.55;所有彩色徽章 3px 墨描边;
+      交互元素 min 44px 热区;焦点环全局保留;reduced-motion 全局降级;
+      @1120px 双列塌单列,@720px 活动流行改纵向堆叠。
+
+■ 六、可点击原型行为(仅演示,工程侧按真实数据接)
+  时钟实时走秒;标签页切换;📖全景展示/🖥标签页模式;抽屉开合(Esc 关闭);
+  特工选择与建议卡联动;「模拟事件」随机推事件 → 滑入活动流 +
+  对应 Agent 卡火花点亮 + 卡片黄框闪烁;「发射任务!」同样推一条 TASK_START。
+════════════════════════════════════════════════════════════════════
+-->
+</body>
+</html>

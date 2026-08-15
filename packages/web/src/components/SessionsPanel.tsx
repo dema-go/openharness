@@ -1,19 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { AgentId, HarnessEvent, SessionSummary } from '@openharness/core';
-import { AGENT_DISPLAY, EVENT_KIND_LABEL } from '@openharness/core';
+import { EVENT_KIND_LABEL } from '@openharness/core';
 import { api } from '../lib/api';
+import { AGENT_CHARACTER, AgentAvatar } from './ComicIcons';
 
-const KIND_TONE: Record<HarnessEvent['kind'], string> = {
-  'session-start': 'text-jade',
-  'session-end': 'text-faint',
-  'user-message': 'text-paper',
-  'assistant-message': 'text-dim',
-  'tool-call': 'text-amber',
-  'file-edit': 'text-jade',
-  'error': 'text-brick',
-  'mode-change': 'text-faint',
-  'task-start': 'text-amber',
-  'task-end': 'text-jade',
+const KIND_STICKER: Record<HarnessEvent['kind'], string> = {
+  'session-start': 'bg-orange',
+  'session-end': 'bg-faint text-white',
+  'user-message': 'bg-white',
+  'assistant-message': 'bg-blue text-white',
+  'tool-call': 'bg-yellow',
+  'file-edit': 'bg-cyan text-white',
+  'error': 'bg-red text-white',
+  'mode-change': 'bg-purple text-white',
+  'task-start': 'bg-red text-white',
+  'task-end': 'bg-green text-white',
 };
 
 function fmtTime(ts: number): string {
@@ -56,67 +57,70 @@ export function SessionsPanel(props: { sessions: SessionSummary[] }): React.JSX.
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line px-4">
-        <h2 className="font-display text-[13px] font-500 text-paper">会话索引</h2>
-        <span className="font-mono text-[11px] text-faint tabular-nums">{visible.length}</span>
-        <div className="ml-3 flex items-center gap-1">
-          {(['all', 'claude', 'codex', 'cursor', 'dsh'] as const).map((f) => (
-            <button
-              key={f}
-              type="button"
-              onClick={() => setAgentFilter(f)}
-              className={`rounded-sm px-2 py-0.5 font-mono text-[11px] transition-colors ${
-                agentFilter === f ? 'bg-panel2 text-paper' : 'text-faint hover:text-dim'
-              }`}
-            >
-              {f === 'all' ? '全部' : f}
-            </button>
-          ))}
-        </div>
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="搜索标题 / 项目 / 会话 ID"
-          className="ml-auto w-64 rounded-sm border border-line bg-ink px-2.5 py-1 font-mono text-[11px] text-paper placeholder:text-faint focus:border-amber/60"
-        />
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {visible.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3 px-8 text-center">
-            <p className="font-display text-[15px] text-dim">没有匹配的会话</p>
-            <p className="max-w-sm text-[13px] leading-relaxed text-faint">
-              会话索引来自各工具本地的会话文件,只读、不迁移。换一个工具筛选,或在任意 Agent 工具里开始一段新会话。
-            </p>
-          </div>
-        ) : (
-          <ul>
-            {visible.map((s) => (
-              <li key={`${s.agent}-${s.sessionId}`}>
-                <button
-                  type="button"
-                  onClick={() => setSelected(s)}
-                  className="flex w-full items-center gap-3 border-b border-line/60 px-4 py-2.5 text-left transition-colors hover:bg-panel"
-                >
-                  <span className="w-[86px] shrink-0 font-mono text-[11px] text-dim">
-                    {AGENT_DISPLAY[s.agent]}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-[13px] text-paper">{s.title}</span>
-                  <span className="hidden shrink-0 font-mono text-[11px] text-faint lg:inline">
-                    {basename(s.projectDir)}
-                  </span>
-                  <span className="shrink-0 font-mono text-[11px] text-faint tabular-nums">
-                    {s.messageCount} 条消息
-                  </span>
-                  <span className="w-[104px] shrink-0 text-right font-mono text-[11px] text-faint tabular-nums">
-                    {fmtTime(s.lastTs)}
-                  </span>
-                </button>
-              </li>
+    <div className="flex min-h-0 flex-1 flex-col p-4">
+      <div className="comic-card flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex h-12 shrink-0 items-center gap-2 border-b-[3px] border-ink px-4">
+          <h2 className="font-display text-[15px] text-ink">会话档案</h2>
+          <span className="font-mono text-[11px] text-faint tabular-nums">{visible.length}</span>
+          <div className="ml-3 flex items-center gap-1.5">
+            {(['all', 'claude', 'codex', 'cursor', 'dsh'] as const).map((f) => (
+              <button
+                key={f}
+                type="button"
+                onClick={() => setAgentFilter(f)}
+                className={`rounded-md border-2 border-ink px-2 py-0.5 font-mono text-[11px] transition-colors ${
+                  agentFilter === f ? 'bg-yellow text-ink' : 'bg-white text-dim hover:bg-panel2'
+                }`}
+                style={agentFilter === f ? { boxShadow: '2px 2px 0 #221D15' } : undefined}
+              >
+                {f === 'all' ? '全部' : f}
+              </button>
             ))}
-          </ul>
-        )}
+          </div>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="搜标题 / 项目 / 会话 ID"
+            className="comic-input ml-auto w-64 py-1 text-[11px]"
+          />
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {visible.length === 0 ? (
+            <div className="flex h-full flex-col items-center justify-center gap-4 px-8 text-center">
+              <div className="bubble font-display text-[13px] text-ink">
+                档案柜空空的!换个筛选,或去特工那里开一段新会话~
+              </div>
+            </div>
+          ) : (
+            <ul className="p-3">
+              {visible.map((s) => (
+                <li key={`${s.agent}-${s.sessionId}`} className="mb-2 last:mb-0">
+                  <button
+                    type="button"
+                    onClick={() => setSelected(s)}
+                    className="flex w-full items-center gap-3 rounded-xl border-[3px] border-ink bg-white px-3 py-2.5 text-left transition-colors hover:bg-panel2"
+                    style={{ boxShadow: '2px 2px 0 #221D15' }}
+                  >
+                    <AgentAvatar agent={s.agent} size={34} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-display text-[13.5px] text-ink">{s.title}</span>
+                      <span className="block truncate font-mono text-[10.5px] text-faint">
+                        {AGENT_CHARACTER[s.agent].name} · {basename(s.projectDir) || '—'}
+                      </span>
+                    </span>
+                    <span className="shrink-0 font-mono text-[10.5px] text-faint tabular-nums">
+                      {s.messageCount} 条
+                    </span>
+                    <span className="w-[96px] shrink-0 text-right font-mono text-[10.5px] text-faint tabular-nums">
+                      {fmtTime(s.lastTs)}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
 
       {selected && (
@@ -164,61 +168,62 @@ function SessionDetail(props: {
 
   return (
     <div className="fixed inset-0 z-40" role="dialog" aria-modal="true">
-      <button type="button" aria-label="关闭" onClick={props.onClose} className="absolute inset-0 cursor-default bg-ink/60" />
-      <aside className="drawer-in absolute right-0 top-0 flex h-full w-full max-w-[560px] flex-col border-l border-line bg-panel shadow-2xl">
-        <div className="shrink-0 border-b border-line px-5 py-4">
+      <button type="button" aria-label="关闭" onClick={props.onClose} className="absolute inset-0 cursor-default bg-ink/40" />
+      <aside className="drawer-in absolute right-0 top-0 flex h-full w-full max-w-[580px] flex-col border-l-[3px] border-ink bg-page shadow-comic-lg">
+        <div className="shrink-0 border-b-[3px] border-ink px-5 py-4">
           <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="font-mono text-[11px] text-faint">
-                {AGENT_DISPLAY[session.agent]} · {fmtTime(session.firstTs)} → {fmtTime(session.lastTs)}
-              </p>
-              <h2 className="mt-1 break-words font-display text-[16px] font-500 text-paper">
-                {session.title}
-              </h2>
-              <p className="mt-1 truncate font-mono text-[11px] text-faint">{session.projectDir ?? '—'}</p>
+            <div className="flex min-w-0 items-center gap-3">
+              <AgentAvatar agent={session.agent} size={44} />
+              <div className="min-w-0">
+                <p className="font-mono text-[10.5px] text-faint">
+                  {AGENT_CHARACTER[session.agent].name} · {fmtTime(session.firstTs)} → {fmtTime(session.lastTs)}
+                </p>
+                <h2 className="mt-0.5 break-words font-display text-[17px] leading-tight text-ink">
+                  {session.title}
+                </h2>
+                <p className="mt-0.5 truncate font-mono text-[10.5px] text-faint">{session.projectDir ?? '—'}</p>
+              </div>
             </div>
             <button
               type="button"
               onClick={props.onClose}
-              className="shrink-0 font-mono text-[12px] text-faint transition-colors hover:text-paper"
+              className="comic-btn shrink-0 bg-white px-2.5 py-1 font-mono text-[12px] text-ink"
             >
               ✕
             </button>
           </div>
 
-          <dl className="mt-3 grid grid-cols-3 gap-2 border-t border-line pt-3 font-mono text-[11px]">
-            <div>
-              <dt className="text-faint">消息</dt>
-              <dd className="mt-0.5 text-dim tabular-nums">{session.messageCount}</dd>
-            </div>
-            <div>
-              <dt className="text-faint">输入 tokens</dt>
-              <dd className="mt-0.5 text-dim tabular-nums">{session.inputTokens.toLocaleString()}</dd>
-            </div>
-            <div>
-              <dt className="text-faint">输出 tokens</dt>
-              <dd className="mt-0.5 text-dim tabular-nums">{session.outputTokens.toLocaleString()}</dd>
-            </div>
+          <dl className="mt-3 grid grid-cols-3 gap-2 font-mono text-[11px]">
+            {[
+              ['消息', String(session.messageCount)],
+              ['输入 tokens', session.inputTokens.toLocaleString()],
+              ['输出 tokens', session.outputTokens.toLocaleString()],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-lg border-2 border-ink bg-white px-2 py-1.5 text-center">
+                <dt className="text-faint">{label}</dt>
+                <dd className="text-ink tabular-nums">{value}</dd>
+              </div>
+            ))}
           </dl>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
-          <p className="mb-2 font-mono text-[11px] text-faint">时间线(最近 100 条)</p>
+          <p className="mb-2 font-display text-[12px] text-dim">时间线(最近 100 条)</p>
           {events === null ? (
-            <p className="text-[13px] text-faint">加载中…</p>
+            <p className="text-[13px] text-faint">翻档案中…</p>
           ) : events.length === 0 ? (
-            <p className="text-[13px] text-faint">该会话暂无已索引的事件。</p>
+            <p className="text-[13px] text-faint">这段会话还没有已索引的事件。</p>
           ) : (
             <ul>
               {events.map((e, i) => (
-                <li key={i} className="flex items-start gap-3 border-b border-line/50 py-1.5">
-                  <span className="w-[64px] shrink-0 font-mono text-[11px] text-faint tabular-nums">
-                    {fmtTime(e.ts)}
-                  </span>
-                  <span className={`w-[60px] shrink-0 font-mono text-[11px] ${KIND_TONE[e.kind]}`}>
+                <li key={i} className="flex items-start gap-2.5 border-b-2 border-dashed border-faint/50 py-1.5">
+                  <span className={`sticker mt-0.5 w-[64px] shrink-0 -rotate-2 justify-center ${KIND_STICKER[e.kind]}`}>
                     {EVENT_KIND_LABEL[e.kind]}
                   </span>
-                  <span className="min-w-0 flex-1 break-words text-[12px] leading-relaxed text-dim">
+                  <span className="mt-1 w-[56px] shrink-0 font-mono text-[10.5px] text-faint tabular-nums">
+                    {fmtTime(e.ts)}
+                  </span>
+                  <span className="min-w-0 flex-1 break-words pt-0.5 text-[12px] leading-relaxed text-ink">
                     {e.summary}
                   </span>
                 </li>
@@ -227,10 +232,10 @@ function SessionDetail(props: {
           )}
         </div>
 
-        <div className="shrink-0 border-t border-line px-5 py-4">
-          <p className="mb-2 font-mono text-[11px] text-faint">在原生工具中恢复此会话</p>
+        <div className="shrink-0 border-t-[3px] border-ink px-5 py-4">
+          <p className="mb-2 font-display text-[12px] text-dim">在原工具里继续这段会话:</p>
           <div className="flex items-center gap-2">
-            <code className="min-w-0 flex-1 truncate rounded-sm border border-line bg-ink px-3 py-2 font-mono text-[12px] text-paper">
+            <code className="min-w-0 flex-1 truncate rounded-lg border-[3px] border-ink bg-white px-3 py-2 font-mono text-[12px] text-ink">
               {session.resumeCommand}
             </code>
             <button
@@ -241,7 +246,7 @@ function SessionDetail(props: {
                   setTimeout(() => setCopied(false), 1500);
                 });
               }}
-              className="shrink-0 rounded-sm border border-line px-3 py-2 font-mono text-[12px] text-dim transition-colors hover:border-amber/60 hover:text-amber"
+              className="comic-btn shrink-0 bg-white px-3 py-2 font-display text-[12px] text-ink"
             >
               {copied ? '已复制 ✓' : '复制'}
             </button>
@@ -258,7 +263,7 @@ function SessionDetail(props: {
                   .finally(() => setOpening(false));
               }}
               disabled={opening}
-              className="shrink-0 rounded-sm border border-amber/60 bg-amber/10 px-3 py-2 font-mono text-[12px] text-amber transition-colors hover:bg-amber/20 disabled:opacity-40"
+              className="comic-btn shrink-0 bg-cyan px-3 py-2 font-display text-[12px] text-white disabled:opacity-40"
             >
               {openError ? '打开失败' : opening ? '打开中…' : '在终端打开'}
             </button>

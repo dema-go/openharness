@@ -13,6 +13,12 @@ import { useBus } from './lib/useBus';
 
 const MAX_EVENTS = 500;
 const ORDER: AgentId[] = ['claude', 'cursor', 'codex', 'dsh'];
+const TABS = [
+  { id: 'feed', label: '实时活动流' },
+  { id: 'sessions', label: '会话档案' },
+  { id: 'usage', label: '用量账本' },
+  { id: 'config', label: '配置速览' },
+] as const;
 
 export function App(): React.JSX.Element {
   const [statuses, setStatuses] = useState<AgentStatus[]>([]);
@@ -72,14 +78,8 @@ export function App(): React.JSX.Element {
     });
     if (t.state !== 'running') {
       refreshSessions();
-      // 桌面通知:任务收尾时提醒(页面打开期间)
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-        const label =
-          t.state === 'done'
-            ? '任务完成'
-            : t.state === 'stopped'
-              ? '任务已打断'
-              : '任务失败';
+        const label = t.state === 'done' ? '任务完成' : t.state === 'stopped' ? '任务已打断' : '任务失败';
         try {
           new Notification(`${label} · ${AGENT_DISPLAY[t.agent]}`, { body: t.prompt.slice(0, 120) });
         } catch {
@@ -93,11 +93,10 @@ export function App(): React.JSX.Element {
   const connected = useBus({ onEvent, onStatus, onTask });
 
   const runningCount = tasks.filter((t) => t.state === 'running').length;
-
   const sorted = [...statuses].sort((a, b) => ORDER.indexOf(a.agent) - ORDER.indexOf(b.agent));
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-screen flex-col bg-page text-ink">
       <TopBar
         connected={connected}
         runningCount={runningCount}
@@ -105,84 +104,72 @@ export function App(): React.JSX.Element {
         clock={clock}
       />
 
-      {/* 窄屏:横向 Agent 状态条 */}
-      <div className="flex shrink-0 gap-2 overflow-x-auto border-b border-line p-3 md:hidden">
+      {/* 窄屏:横向特工条 */}
+      <div className="flex shrink-0 gap-2 overflow-x-auto border-b-[3px] border-ink px-3 py-2.5 md:hidden">
         {sorted.map((s) => (
-          <div key={s.agent} className="flex shrink-0 items-center gap-2 rounded-sm border border-line bg-panel px-3 py-1.5">
+          <div
+            key={s.agent}
+            className="flex shrink-0 items-center gap-2 rounded-lg border-2 border-ink bg-white px-3 py-1.5"
+            style={{ boxShadow: '2px 2px 0 #221D15' }}
+          >
             <span
-              className={`h-2 w-2 rounded-full ${
-                s.state === 'running' ? 'bg-amber' : s.state === 'idle' ? 'bg-jade' : 'bg-faint'
+              className={`h-2.5 w-2.5 rounded-full border-2 border-ink ${
+                s.state === 'running' ? 'bg-red' : s.state === 'idle' ? 'bg-green' : 'bg-faint'
               }`}
             />
-            <span className="font-display text-[12px] text-paper">{AGENT_DISPLAY[s.agent]}</span>
-            <span className="font-mono text-[10px] text-faint">
-              {s.state === 'running' ? '运行中' : s.state === 'idle' ? '待命' : '未接入'}
+            <span className="font-display text-[12px]">{AGENT_DISPLAY[s.agent]}</span>
+            <span className="font-mono text-[9.5px] text-faint">
+              {s.state === 'running' ? '干活中' : s.state === 'idle' ? '待命' : '未接入'}
             </span>
           </div>
         ))}
       </div>
 
       <div className="flex min-h-0 flex-1">
-        <aside className="hidden w-[300px] shrink-0 space-y-3 overflow-y-auto border-r border-line p-4 md:block">
-          {sorted.map((s) => (
-            <AgentCard key={s.agent} status={s} pulse={pulses.current[s.agent] ?? 0} />
+        <aside className="halftone hidden w-[308px] shrink-0 space-y-3.5 overflow-y-auto border-r-[3px] border-ink p-4 md:block">
+          <h2 className="font-display text-[16px] text-ink">特工小队</h2>
+          {sorted.map((s, i) => (
+            <AgentCard key={s.agent} status={s} pulse={pulses.current[s.agent] ?? 0} index={i} />
           ))}
         </aside>
 
         <main className="flex min-w-0 flex-1 flex-col">
-          <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line px-4">
-            <button
-              type="button"
-              onClick={() => setTab('feed')}
-              className={`rounded-sm px-2.5 py-1 font-display text-[13px] transition-colors ${
-                tab === 'feed' ? 'bg-panel2 text-paper' : 'text-faint hover:text-dim'
-              }`}
-            >
-              活动流
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab('sessions')}
-              className={`rounded-sm px-2.5 py-1 font-display text-[13px] transition-colors ${
-                tab === 'sessions' ? 'bg-panel2 text-paper' : 'text-faint hover:text-dim'
-              }`}
-            >
-              会话索引
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab('usage')}
-              className={`rounded-sm px-2.5 py-1 font-display text-[13px] transition-colors ${
-                tab === 'usage' ? 'bg-panel2 text-paper' : 'text-faint hover:text-dim'
-              }`}
-            >
-              用量
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab('config')}
-              className={`rounded-sm px-2.5 py-1 font-display text-[13px] transition-colors ${
-                tab === 'config' ? 'bg-panel2 text-paper' : 'text-faint hover:text-dim'
-              }`}
-            >
-              配置
-            </button>
+          <div className="flex h-14 shrink-0 items-end gap-2 px-4 pt-3">
+            {TABS.map((t, i) => {
+              const active = tab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setTab(t.id)}
+                  className={`rounded-t-xl border-[3px] border-b-0 border-ink px-4 py-1.5 font-display text-[13.5px] transition-colors ${
+                    active ? 'bg-white' : 'bg-panel2/60 hover:bg-panel2'
+                  } ${i % 2 === 1 ? 'translate-y-[3px]' : ''}`}
+                  style={active ? { boxShadow: '0 -3px 0 #fff' } : undefined}
+                >
+                  {active && <span className="mr-1.5 text-red">★</span>}
+                  {t.label}
+                </button>
+              );
+            })}
           </div>
-          {tab === 'feed' ? (
-            <ActivityFeed
-              events={events}
-              filter={filter}
-              onFilter={setFilter}
-              paused={paused}
-              onTogglePause={() => setPaused((p) => !p)}
-            />
-          ) : tab === 'sessions' ? (
-            <SessionsPanel sessions={sessions} />
-          ) : tab === 'usage' ? (
-            <UsagePanel />
-          ) : (
-            <ConfigPanel />
-          )}
+          <div className="min-h-0 flex-1">
+            {tab === 'feed' ? (
+              <ActivityFeed
+                events={events}
+                filter={filter}
+                onFilter={setFilter}
+                paused={paused}
+                onTogglePause={() => setPaused((p) => !p)}
+              />
+            ) : tab === 'sessions' ? (
+              <SessionsPanel sessions={sessions} />
+            ) : tab === 'usage' ? (
+              <UsagePanel />
+            ) : (
+              <ConfigPanel />
+            )}
+          </div>
         </main>
       </div>
 

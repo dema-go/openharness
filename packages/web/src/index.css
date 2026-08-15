@@ -1,110 +1,179 @@
 @import "tailwindcss";
 
 /*
- * OpenHarness 设计令牌 —— “任务控制舱”
- * 石墨底色 + 暖纸白文字 + 琥珀/玉色信号灯;
- * 大胆只花在一处:Agent 卡上的 LED 信号表。
+ * OpenHarness 设计体系 —— 《阿衰》式彩色漫画风
+ * (设计由 Open Design × DeepSeek Harness 生成,工程师移植:
+ *  见 design/cartoon-mockup.html 与 design/brief.md)
+ *
+ * 纸张奶油底 + 高饱和撞色 + 3px 墨线描边 + 硬偏移实影(无模糊)
+ * 字体: 站酷快乐体(中文手绘)/ Luckiest Guy(英文漫画)/ IBM Plex Mono(数据)
  */
 @theme {
-  --color-ink: #0f1216;
-  --color-panel: #161b21;
-  --color-panel2: #1d232c;
-  --color-line: #262e3a;
-  --color-paper: #e7e3d8;
-  --color-dim: #8a93a3;
-  --color-faint: #525b6b;
-  --color-amber: #e0a63c;
-  --color-jade: #7fb69b;
-  --color-brick: #c96a63;
+  --color-ink: #221d15;
+  --color-page: #fff3d6;
+  --color-panel: #fffdf6;
+  --color-panel2: #ffe9b8;
+  --color-line: #221d15;
+  --color-paper: #221d15; /* 兼容旧语义:主文字 = 墨色 */
+  --color-dim: #7a6847;
+  --color-faint: #a69268;
+  --color-amber: #ffc531;
+  --color-jade: #43d17c;
+  --color-brick: #ff4433;
+  --color-red: #ff4433;
+  --color-yellow: #ffc531;
+  --color-cyan: #00c2dc;
+  --color-purple: #8b4dff;
+  --color-green: #43d17c;
+  --color-blue: #3d8bff;
+  --color-pink: #ff8fb1;
+  --color-orange: #ff9f1c;
 
-  --font-display: "Space Grotesk Variable", "PingFang SC", system-ui, sans-serif;
+  --font-display: "ZCOOL KuaiLe", "PingFang SC", system-ui, sans-serif;
+  --font-comic: "Luckiest Guy", "ZCOOL KuaiLe", system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
-  --font-sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  --font-sans: "ZCOOL KuaiLe", "PingFang SC", system-ui, sans-serif;
+
+  --shadow-comic-sm: 3px 3px 0 #221d15;
+  --shadow-comic: 5px 5px 0 #221d15;
+  --shadow-comic-lg: 8px 8px 0 #221d15;
 }
 
 @layer base {
-  html {
-    color-scheme: dark;
-  }
   body {
-    @apply bg-ink text-paper font-sans antialiased;
-    font-feature-settings: "tnum";
+    @apply bg-page font-sans text-ink antialiased;
   }
   ::selection {
-    background: rgb(224 166 60 / 0.25);
+    background: var(--color-yellow);
+    color: var(--color-ink);
   }
   :focus-visible {
-    outline: 1px solid var(--color-amber);
+    outline: 3px solid var(--color-red);
     outline-offset: 2px;
+    border-radius: 4px;
   }
   ::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+    width: 12px;
+    height: 12px;
   }
   ::-webkit-scrollbar-thumb {
-    background: var(--color-line);
-    border: 3px solid var(--color-ink);
-    border-radius: 6px;
+    background: var(--color-ink);
+    border: 3px solid var(--color-page);
+    border-radius: 8px;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
   }
 }
 
-/* —— 签名元素:LED 信号灯 —— */
-@keyframes lamp-flash {
+@layer components {
+  /* 漫画格:白底 + 3px 墨线 + 硬实影 */
+  .comic-card {
+    @apply rounded-xl border-[3px] border-ink bg-panel shadow-comic;
+  }
+  /* 漫画按钮:按压位移 */
+  .comic-btn {
+    @apply rounded-lg border-[3px] border-ink font-display shadow-comic transition-none;
+  }
+  .comic-btn:active {
+    transform: translate(3px, 3px);
+    box-shadow: 1px 1px 0 var(--color-ink);
+  }
+  /* 网点纸纹理 */
+  .halftone {
+    background-image: radial-gradient(circle, rgb(34 29 21 / 0.12) 1px, transparent 1.4px);
+    background-size: 8px 8px;
+  }
+  /* 对话气泡(带尾巴) */
+  .bubble {
+    @apply relative rounded-2xl border-[3px] border-ink bg-white px-3.5 py-2.5;
+    box-shadow: 3px 3px 0 rgb(34 29 21 / 0.85);
+  }
+  .bubble::after {
+    content: "";
+    position: absolute;
+    left: 18px;
+    bottom: -11px;
+    border-width: 9px 8px 0 8px;
+    border-style: solid;
+    border-color: var(--color-ink) transparent transparent transparent;
+  }
+  .bubble::before {
+    content: "";
+    position: absolute;
+    left: 21px;
+    bottom: -6px;
+    border-width: 6px 5px 0 5px;
+    border-style: solid;
+    border-color: #fff transparent transparent transparent;
+    z-index: 1;
+  }
+  /* 贴纸式小徽章 */
+  .sticker {
+    @apply inline-flex items-center gap-1 rounded-md border-2 border-ink px-2 py-0.5 font-display text-[11px];
+    box-shadow: 2px 2px 0 rgb(34 29 21 / 0.8);
+  }
+  /* 表单控件 */
+  .comic-input {
+    @apply w-full rounded-lg border-[3px] border-ink bg-white px-3 py-2 font-mono text-[13px] text-ink placeholder:text-faint;
+  }
+  .comic-input:focus {
+    box-shadow: 3px 3px 0 var(--color-yellow);
+  }
+}
+
+/* —— 动效(签名元素:火花条 + 弹出) —— */
+@keyframes pop-star {
   0% {
-    background: #fff2cf;
-    box-shadow: 0 0 10px 2px rgb(224 166 60 / 0.9);
+    transform: scale(0.1) rotate(-40deg);
   }
-  100% {
-    background: var(--color-amber);
-    box-shadow: none;
-  }
-}
-.lamp-on {
-  animation: lamp-flash 1.1s ease-out forwards;
-}
-
-@keyframes orb-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgb(224 166 60 / 0.45);
-  }
-  50% {
-    box-shadow: 0 0 0 6px rgb(224 166 60 / 0);
-  }
-}
-.orb-running {
-  animation: orb-pulse 2.2s ease-in-out infinite;
-}
-
-@keyframes cursor-blink {
-  0%,
   55% {
-    opacity: 1;
+    transform: scale(1.35) rotate(12deg);
   }
-  56%,
   100% {
-    opacity: 0;
+    transform: scale(1) rotate(0deg);
   }
 }
-.cursor-blink {
-  animation: cursor-blink 1.4s steps(1) infinite;
+.spark-pop {
+  animation: pop-star 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) both;
 }
 
-@keyframes feed-in {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
+@keyframes twinkle {
+  0%,
+  86%,
+  100% {
     opacity: 1;
-    transform: translateY(0);
+  }
+  93% {
+    opacity: 0.4;
+  }
+}
+.twinkle {
+  animation: twinkle 3.4s ease-in-out infinite;
+}
+.twinkle-2 {
+  animation-delay: 1.1s;
+}
+.twinkle-3 {
+  animation-delay: 2.2s;
+}
+
+@keyframes feed-bounce {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.97);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(2px) scale(1.01);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
 .feed-in {
-  animation: feed-in 0.28s ease-out;
+  animation: feed-bounce 0.32s ease-out;
 }
 
 @keyframes drawer-in {
@@ -121,12 +190,27 @@
   animation: drawer-in 0.22s ease-out;
 }
 
+@keyframes wiggle {
+  0%,
+  100% {
+    transform: rotate(-1.5deg);
+  }
+  50% {
+    transform: rotate(1.5deg);
+  }
+}
+.wiggle {
+  animation: wiggle 2.6s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .lamp-on,
-  .orb-running,
-  .cursor-blink,
+  .spark-pop,
+  .twinkle,
+  .twinkle-2,
+  .twinkle-3,
   .feed-in,
-  .drawer-in {
+  .drawer-in,
+  .wiggle {
     animation: none;
   }
 }

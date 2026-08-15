@@ -79,6 +79,12 @@ importers:
       '@fontsource/ibm-plex-mono':
         specifier: ^5.1.0
         version: 5.3.0
+      '@fontsource/luckiest-guy':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource/zcool-kuaile':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@openharness/core':
         specifier: workspace:*
         version: link:../core
@@ -513,6 +519,12 @@ packages:
 
   '@fontsource/ibm-plex-mono@5.3.0':
     resolution: {integrity: sha512-eTgnZjZEGk1QtD3ZstF+Vclo2HLAni8YMy34/DxllwZvyz1lR/1RF/xTiAquOBO7MvqBx8D2Ig2WCPMVfdZu7Q==}
+
+  '@fontsource/luckiest-guy@5.3.0':
+    resolution: {integrity: sha512-wCtuVkExxmKeW0FngmKVTcCK9T0elvjoP4/ZZaINqsUjlk9CB17Rr9FQ6pIDlN4nzouDMGSuqYvge3VoKqslPA==}
+
+  '@fontsource/zcool-kuaile@5.3.0':
+    resolution: {integrity: sha512-jn4vpQ6QSVEckUn7uk5a9XcZMxEksTRqljmeE1VKRGMjGd6VoXdMyLGSdnTXSVwZLCCEHaIcm/2cdQuwvasJ9w==}
 
   '@hono/node-server@1.19.17':
     resolution: {integrity: sha512-dSneS5qhiauZWGDCeK4o695Xd9nUNjviSZCMQrj10eetr8Uln1ucn6bbphOM6UynAMMtNIzZNSpL9vnASJwrPQ==}
@@ -1542,6 +1554,10 @@ snapshots:
   '@fontsource-variable/space-grotesk@5.3.0': {}
 
   '@fontsource/ibm-plex-mono@5.3.0': {}
+
+  '@fontsource/luckiest-guy@5.3.0': {}
+
+  '@fontsource/zcool-kuaile@5.3.0': {}
 
   '@hono/node-server@1.19.17(hono@4.13.2)':
     dependencies:

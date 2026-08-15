@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client';
 import '@fontsource-variable/space-grotesk';
 import '@fontsource/ibm-plex-mono/400.css';
 import '@fontsource/ibm-plex-mono/500.css';
+import '@fontsource/zcool-kuaile';
+import '@fontsource/luckiest-guy';
 import './index.css';
 import { App } from './App';
 
