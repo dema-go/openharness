@@ -3,6 +3,26 @@
 > 版本规则与提交规范见 [docs/harness/git.md](docs/harness/git.md)。新版本在上。
 > 早期版本(v0.1 / v0.2)在引入 CHANGELOG 前,按 git log 与 README 简录补记。
 
+## [v0.3.1] - 2026-08-15
+
+用户反馈闭环第 2 轮(6 条,用户授权全部采用推荐方案),以修复与体验打磨为主。
+
+### 修复
+- **通知**:osascript(系统显示为"脚本编辑器",点击展开打开脚本编辑器)→ terminal-notifier,归属正常、点击直达控制台;未安装时回退 osascript
+- **对话室**:任务气泡重复(task-start 事件早于 send() 登记导致双行)
+- **codex**:退出码 0 但无助手输出(网络重连耗尽)误报"任务完成" → 显性标记失败
+- **claude**:headless 权限拦截被吞导致"假完成"(报告没写出来却显示完成)→ 显性失败并提示勾选「完全自主」重试
+- **cursor**:未登录报错不可操作 → 映射为可操作指引(cursor-agent login / CURSOR_API_KEY)
+
+### 新增
+- **对话室体验**:错误事件实时入对话气泡;任务收尾必有反馈(无助手输出时补系统气泡说明原因);发送框固定底部,仅停在底部时自动吸底,读历史不被拽走,「↓ 新消息」浮钮一键回底;加载更早保持视口位置
+- **活动流**:改为最新在前 + 「↑ 最新」浮钮 + 「加载更早」移至列表底部
+- **跨 Agent 派活回流**:切换/续接时向 Agent 注入本机 API 协作约定(带 conversationId);`POST /api/tasks` 支持 `conversationId`,外部派活的任务结果回流对话
+- **displayPrompt**:气泡与活动流显示用户原文而非注入摘要后的长 prompt
+
+### 工程
+- terminal-notifier 安装至 /opt/homebrew(brew 升级受网络限制,经 GitHub API 直装)
+
 ## [v0.3.0] - 2026-08-15
 
 用户反馈闭环第 1 轮(docs/harness/user-question.md),全部交付并端到端实测。

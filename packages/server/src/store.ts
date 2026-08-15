@@ -441,6 +441,15 @@ export class Store implements CursorStore {
       .run(content, now, taskId);
   }
 
+  /** 该任务是否已有 task 气泡(防止 task-start 事件早于 send() 建行导致重复) */
+  hasConversationTaskMessage(convId: string, taskId: string): boolean {
+    return Boolean(
+      this.db
+        .prepare("SELECT 1 FROM conversation_messages WHERE conv_id = ? AND task_id = ? AND role = 'task' LIMIT 1")
+        .get(convId, taskId),
+    );
+  }
+
   conversationMessages(convId: string, opts: { limit?: number; beforeSeq?: number } = {}): { messages: ConversationMessage[]; hasMore: boolean } {
     const { limit = 100, beforeSeq } = opts;
     const clauses = ['conv_id = ?'];

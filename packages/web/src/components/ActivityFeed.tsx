@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AgentId, EventKind, HarnessEvent } from '@openharness/core';
 import { AGENT_DISPLAY, EVENT_KIND_LABEL } from '@openharness/core';
 import { api } from '../lib/api';
@@ -54,7 +54,7 @@ export function ActivityFeed(props: {
 }): React.JSX.Element {
   const { liveEvents, paused, onTogglePause } = props;
   const scroller = useRef<HTMLDivElement>(null);
-  const [atBottom, setAtBottom] = useState(true);
+  const [atTop, setAtTop] = useState(true);
 
   // 服务端分页历史(时间正序);实时事件由父级 WS 累积后传入
   const [history, setHistory] = useState<HarnessEvent[]>([]);
@@ -65,9 +65,6 @@ export function ActivityFeed(props: {
   const [kinds, setKinds] = useState<EventKind[]>([]);
   const [query, setQuery] = useState('');
   const [pageSize, setPageSize] = useState(100);
-
-  // 加载更早时记录滚动位置,prepend 后保持视口不动
-  const pendingRestore = useRef<{ height: number; top: number } | null>(null);
 
   const fetchPage = useCallback(
     async (beforeSeq: number | undefined, reset: boolean) => {
@@ -101,21 +98,8 @@ export function ActivityFeed(props: {
     void fetchPage(undefined, true);
   }, [fetchPage]);
 
-  useLayoutEffect(() => {
-    const el = scroller.current;
-    const pending = pendingRestore.current;
-    if (el && pending) {
-      el.scrollTop = el.scrollHeight - pending.height + pending.top;
-      pendingRestore.current = null;
-    }
-  }, [history]);
-
   const loadOlder = () => {
     if (loadingOlder || loading || !hasMore) return;
-    const el = scroller.current;
-    pendingRestore.current = el
-      ? { height: el.scrollHeight, top: el.scrollTop }
-      : { height: 0, top: 0 };
     setLoadingOlder(true);
     const oldest = history.length
       ? Math.min(...history.map((e) => e.seq ?? Number.MAX_SAFE_INTEGER))
@@ -123,15 +107,24 @@ export function ActivityFeed(props: {
     void fetchPage(oldest === Number.MAX_SAFE_INTEGER ? undefined : oldest, false);
   };
 
+  // 最新在前:停在顶部时新事件自动置顶跟随
   useEffect(() => {
     const el = scroller.current;
-    if (el && atBottom && !paused) el.scrollTop = el.scrollHeight;
-  }, [liveEvents.length, history.length, atBottom, paused]);
+    if (el && atTop && !paused) el.scrollTop = 0;
+  }, [liveEvents.length, history.length, atTop, paused]);
 
   const handleScroll = () => {
     const el = scroller.current;
     if (!el) return;
-    setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 48);
+    setAtTop(el.scrollTop < 48);
+  };
+
+  const scrollToTop = () => {
+    const el = scroller.current;
+    if (el) {
+      el.scrollTop = 0;
+      setAtTop(true);
+    }
   };
 
   const visible = useMemo(() => {
@@ -139,6 +132,9 @@ export function ActivityFeed(props: {
     const extra = liveEvents.filter((e) => e.seq === undefined || !seen.has(e.seq));
     return [...history, ...extra].filter((e) => matchEvent(e, filter, kinds, query.trim().toLowerCase()));
   }, [history, liveEvents, filter, kinds, query]);
+
+  // 展示顺序:最新在前
+  const shown = useMemo(() => [...visible].reverse(), [visible]);
 
   const toggleKind = (k: EventKind) => {
     setKinds((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
@@ -173,7 +169,7 @@ export function ActivityFeed(props: {
               ))}
             </div>
             <div className="ml-auto flex items-center gap-3">
-              {!atBottom && !paused && <span className="font-mono text-[11px] text-red">有新活动 ↓</span>}
+              {!atTop && !paused && <span className="font-mono text-[11px] text-red">有新活动 ↑</span>}
               <select
                 value={pageSize}
                 onChange={(e) => setPageSize(Number(e.target.value))}
@@ -236,63 +232,76 @@ export function ActivityFeed(props: {
           </div>
         </div>
 
-        {hasMore && (
-          <button
-            type="button"
-            onClick={loadOlder}
-            disabled={loadingOlder}
-            className="shrink-0 border-b-2 border-dashed border-faint/50 bg-panel2/50 px-4 py-1.5 text-center font-mono text-[11px] text-dim transition-colors hover:bg-panel2 hover:text-ink disabled:opacity-40"
-          >
-            {loadingOlder ? '翻旧账中…' : '▲ 加载更早'}
-          </button>
-        )}
-
-        <div ref={scroller} onScroll={handleScroll} className="min-h-0 flex-1 overflow-y-auto">
-          {loading ? (
-            <div className="flex h-full items-center justify-center">
-              <p className="font-mono text-[12px] text-faint">翻活动流中…</p>
-            </div>
-          ) : visible.length === 0 ? (
-            <div className="flex h-full flex-col items-center justify-center gap-4 px-8 text-center">
-              <svg viewBox="0 0 100 100" width="72" height="72" aria-hidden>
-                <circle cx="50" cy="50" r="46" fill="#fff" stroke="#221D15" strokeWidth="5" />
-                <circle cx="36" cy="42" r="6" fill="#221D15" />
-                <circle cx="64" cy="42" r="6" fill="#221D15" />
-                <path d="M32 68 Q50 56 68 68" stroke="#221D15" strokeWidth="5" fill="none" strokeLinecap="round" />
-                <path d="M14 22 L4 12 M86 22 L96 12" stroke="#221D15" strokeWidth="4" strokeLinecap="round" />
-              </svg>
-              <div className="bubble font-display text-[13px] text-ink">
-                {filtering ? '没有匹配的消息,换个筛选试试~' : '这里还空空的哦!发个任务,或去任意工具里开一局~'}
+        <div className="relative min-h-0 flex-1">
+          <div ref={scroller} onScroll={handleScroll} className="h-full overflow-y-auto">
+            {loading ? (
+              <div className="flex h-full items-center justify-center">
+                <p className="font-mono text-[12px] text-faint">翻活动流中…</p>
               </div>
-            </div>
-          ) : (
-            <ul className="py-3">
-              {visible.map((e, i) => (
-                <li key={e.seq ?? `live-${i}`} className="feed-in flex items-start gap-3 px-4 py-2">
-                  <span
-                    className={`sticker mt-0.5 w-[74px] shrink-0 -rotate-2 justify-center ${KIND_STICKER[e.kind]}`}
+            ) : shown.length === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center gap-4 px-8 text-center">
+                <svg viewBox="0 0 100 100" width="72" height="72" aria-hidden>
+                  <circle cx="50" cy="50" r="46" fill="#fff" stroke="#221D15" strokeWidth="5" />
+                  <circle cx="36" cy="42" r="6" fill="#221D15" />
+                  <circle cx="64" cy="42" r="6" fill="#221D15" />
+                  <path d="M32 68 Q50 56 68 68" stroke="#221D15" strokeWidth="5" fill="none" strokeLinecap="round" />
+                  <path d="M14 22 L4 12 M86 22 L96 12" stroke="#221D15" strokeWidth="4" strokeLinecap="round" />
+                </svg>
+                <div className="bubble font-display text-[13px] text-ink">
+                  {filtering ? '没有匹配的消息,换个筛选试试~' : '这里还空空的哦!发个任务,或去任意工具里开一局~'}
+                </div>
+              </div>
+            ) : (
+              <>
+                <ul className="py-3">
+                  {shown.map((e, i) => (
+                    <li key={e.seq ?? `live-${i}`} className="feed-in flex items-start gap-3 px-4 py-2">
+                      <span
+                        className={`sticker mt-0.5 w-[74px] shrink-0 -rotate-2 justify-center ${KIND_STICKER[e.kind]}`}
+                      >
+                        {EVENT_KIND_LABEL[e.kind]}
+                      </span>
+                      <span className="mt-1 w-[62px] shrink-0 font-mono text-[10.5px] text-faint tabular-nums">
+                        {fmtTime(e.ts)}
+                      </span>
+                      <span
+                        className="mt-1 w-[96px] shrink-0 truncate font-display text-[12px]"
+                        style={{ color: AGENT_CHARACTER[e.agent].color }}
+                        title={AGENT_DISPLAY[e.agent]}
+                      >
+                        {AGENT_CHARACTER[e.agent].name}
+                      </span>
+                      <span className="min-w-0 flex-1 break-words pt-1 text-[13px] leading-relaxed text-ink">
+                        {e.summary}
+                      </span>
+                      <span className="mt-1 hidden shrink-0 font-mono text-[10.5px] text-faint lg:inline">
+                        {basename(e.projectDir)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                {hasMore && (
+                  <button
+                    type="button"
+                    onClick={loadOlder}
+                    disabled={loadingOlder}
+                    className="block w-full border-t-2 border-dashed border-faint/50 py-1.5 text-center font-mono text-[11px] text-dim transition-colors hover:text-ink disabled:opacity-40"
                   >
-                    {EVENT_KIND_LABEL[e.kind]}
-                  </span>
-                  <span className="mt-1 w-[62px] shrink-0 font-mono text-[10.5px] text-faint tabular-nums">
-                    {fmtTime(e.ts)}
-                  </span>
-                  <span
-                    className="mt-1 w-[96px] shrink-0 truncate font-display text-[12px]"
-                    style={{ color: AGENT_CHARACTER[e.agent].color }}
-                    title={AGENT_DISPLAY[e.agent]}
-                  >
-                    {AGENT_CHARACTER[e.agent].name}
-                  </span>
-                  <span className="min-w-0 flex-1 break-words pt-1 text-[13px] leading-relaxed text-ink">
-                    {e.summary}
-                  </span>
-                  <span className="mt-1 hidden shrink-0 font-mono text-[10.5px] text-faint lg:inline">
-                    {basename(e.projectDir)}
-                  </span>
-                </li>
-              ))}
-            </ul>
+                    {loadingOlder ? '翻旧账中…' : '▼ 加载更早'}
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+          {!atTop && shown.length > 0 && (
+            <button
+              type="button"
+              onClick={scrollToTop}
+              className="sticker absolute top-3 right-5 z-10 bg-red text-white"
+              style={{ boxShadow: '3px 3px 0 #221D15' }}
+            >
+              ↑ 最新
+            </button>
           )}
         </div>
       </div>

@@ -57,3 +57,17 @@
 - [x] 5.3 发射台与对话室各加「完全自主」开关(红框警示、localStorage 记忆、默认关闭)
 - [x] 5.4 服务端路由透传(/api/tasks 与对话消息)
 - [x] 5.5 typecheck + build + claude 真实验证(进程参数 + 零确认完成)
+
+## 第 2 轮:2026-08-15 用户反馈(用户授权:全部采用推荐方案,无需确认)
+
+> 来源:docs/harness/user-question.md 第 2 轮(5 条)
+> 已确认决策(用户授权按推荐):通知改用 terminal-notifier;权限拦截显性化+自主模式验证;cursor 登录友好报错;对话室吸底+新消息提示;错误事件入对话气泡+任务收尾必反馈。
+
+- [x] 2.1 调查日志:cursor 失败=未登录;codex 网络重连错误未入气泡;task-start 缺 conversationId;通知=osascript 脚本编辑器
+- [x] 2.2 通知修复:terminal-notifier(点击打开控制台),未安装回退 osascript(brew 被墙,改经 GitHub API 下载安装,实测通知发送成功)
+- [x] 2.3 对话室滚动:吸底跟随 + 「↓ 新消息」浮钮 + 加载更早不跳视口
+- [x] 2.4 claude/codex/cursor 错误映射:权限拦截/未登录 → 可操作的 error 提示
+- [x] 2.5 任务收尾必反馈:error 事件入对话气泡;无助手输出时补系统气泡;task-start 带 conversationId;派活提示注入
+- [x] 2.6 完全自主验证:dsh/claude 实跑;cursor 验证报错路径(未登录)
+- [x] 2.7 全量验证:typecheck/build/重启/浏览器截图/四 Agent 真实任务(dsh·claude 成功,codex 显性报错,cursor 可操作报错)
+- [x] 2.8 回标 user-question + CHANGELOG + README + commit + push

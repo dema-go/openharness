@@ -2,7 +2,7 @@
 
 > **个人 Agent 控制台** —— 一个页面,管理、操作、监控你的所有 AI 编程 Agent(Cursor · Claude Code · Codex · DeepSeek Harness),保留每个工具的原生特色。
 > 视觉:《阿衰》式彩色漫画风,由 Open Design × DeepSeek Harness 设计生成([设计文档](docs/DESIGN.md))。
-> 当前版本:**v0.3.0**(变更记录见 [CHANGELOG](CHANGELOG.md))。
+> 当前版本:**v0.3.1**(变更记录见 [CHANGELOG](CHANGELOG.md))。
 
 ![控制台首页](docs/screenshots/cartoon-home.png)
 
@@ -46,7 +46,7 @@
 | 能力 | 说明 | 状态 |
 |---|---|---|
 | 实时监控 | 四工具会话文件监听 + 任务流式捕获 + 进程探测,统一活动流(WebSocket 推送) | ✅ |
-| 活动流分页筛选 | 游标「加载更早」+ 每页 50/100/200 + 10 种事件类型筛选 + 关键词搜索 | ✅ |
+| 活动流分页筛选 | 最新在前 + 游标「加载更早」+ 每页 50/100/200 + 10 种事件类型筛选 + 关键词搜索,「↑ 最新」浮钮一键回顶 | ✅ |
 | 任务发射 | 经各工具**原生 CLI** 启动(`claude -p` / `codex exec` / `cursor-agent` / `dsh --profile headless`),保留 hooks/sandbox/plan 等全部原生能力;可选「完全自主」跳过所有权限确认(claude `--dangerously-skip-permissions` / codex `--dangerously-bypass-approvals-and-sandbox` / cursor `--yolo --sandbox disabled`) | ✅ |
 | 任务排队 | 勾选「排队执行」,Agent 忙时 FIFO 入队,收尾自动接续 | ✅ |
 | 打断/移除 | 进程组 SIGINT,状态正确归因(stopped vs error) | ✅ |
@@ -57,7 +57,7 @@
 | 用量统计 | 总量 / 按工具 / 按模型 / 按天 / 按项目,范围可选(7/14/30/90 天/全部/自定义起止),含数据完整性标注 | ✅ |
 | 配置编辑 | 四工具配置直接编辑(api key / baseUrl / 模型等),写回原配置文件,密钥不回显 | ✅ |
 | 配置预设 | cc switch 式:整套配置一键存为预设、一键切换/删除,密钥仅存本机 | ✅ |
-| 通知 | 浏览器通知 + 服务端 macOS 通知(浏览器关闭也提醒) | ✅ |
+| 通知 | 浏览器通知 + 服务端 macOS 通知(terminal-notifier,点击直达控制台,浏览器关闭也提醒) | ✅ |
 | 任务历史 | SQLite 持久化,重启保留,僵尸任务自动归位 | ✅ |
 
 ## 技术栈

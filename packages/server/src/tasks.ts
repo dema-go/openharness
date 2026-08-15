@@ -156,8 +156,8 @@ export class TaskManager {
       projectDir: opts.cwd,
       sessionId: info.id,
       kind: 'task-start',
-      summary: `发起任务:${truncate(opts.prompt, 120)}`,
-      meta: { taskId: info.id, cwd: opts.cwd },
+      summary: `发起任务:${truncate(opts.displayPrompt ?? opts.prompt, 120)}`,
+      meta: { taskId: info.id, cwd: opts.cwd, conversationId: opts.conversationId, resumeSessionId: opts.resumeSessionId },
     });
     info.state = 'running';
     info.startedAt = Date.now();

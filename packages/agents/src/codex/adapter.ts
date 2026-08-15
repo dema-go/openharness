@@ -118,17 +118,28 @@ export class CodexAdapter implements AgentAdapter {
     let sessionId: string | null = opts.resumeSessionId ?? null;
     let settled = false;
     let errTail = '';
+    let hadAssistant = false;
+    let lastError = '';
 
     const settle = (exitCode: number | null, state: 'done' | 'error') => {
       if (settled) return;
       settled = true;
+      // 退出码 0 但没有助手输出(网络重连耗尽等)视作失败,避免"假完成"
+      if (state === 'done' && !hadAssistant && lastError) {
+        state = 'error';
+      }
       onEvent({
         ts: Date.now(),
         agent: 'codex',
         projectDir: opts.cwd,
         sessionId: sessionId ?? id,
         kind: 'task-end',
-        summary: state === 'done' ? '任务完成' : `任务异常退出${errTail ? ':' + truncate(errTail, 160) : ''}`,
+        summary:
+          state === 'done'
+            ? '任务完成'
+            : !hadAssistant && lastError
+              ? `任务异常(无助手输出):${truncate(lastError, 120)}。请检查 Codex 登录态(codex login)与网络,或勾选「完全自主」后重试`
+              : `任务异常退出${errTail ? ':' + truncate(errTail, 160) : ''}`,
         meta: { taskId: id, conversationId: opts.conversationId, exitCode, state },
       });
     };
@@ -163,6 +174,8 @@ export class CodexAdapter implements AgentAdapter {
       }
       for (const e of normalizeRecord(rec)) {
         if (e.kind === 'user-message') continue; // 工具结果回显太噪,略过
+        if (e.kind === 'assistant-message') hadAssistant = true;
+        if (e.kind === 'error') lastError = e.summary;
         onEvent({
           ...e,
           sessionId: sessionId ?? e.sessionId,

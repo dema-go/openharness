@@ -33,6 +33,8 @@ export class ConversationManager {
   private readonly convTask = new Map<string, string>();
   /** taskId → convId(事件归因兜底) */
   private readonly taskConv = new Map<string, string>();
+  /** taskId → 是否已收到过助手输出(收尾时若无输出则补反馈气泡) */
+  private readonly taskAssistantSeen = new Map<string, boolean>();
 
   constructor(
     private readonly store: Store,
@@ -117,19 +119,24 @@ export class ConversationManager {
     const task = await this.tasks.start(adapter, {
       cwd: cwd.trim(),
       prompt,
+      displayPrompt: text,
       conversationId: convId,
       resumeSessionId,
       bypassPermissions: opts.bypassPermissions === true,
     });
     this.taskConv.set(task.id, convId);
     this.convTask.set(convId, task.id);
+    this.taskAssistantSeen.set(task.id, false);
     this.store.setConversationAgent(convId, agent, state?.sessionId ?? null, cwd.trim());
-    this.pushMessage(convId, {
-      agent,
-      role: 'task',
-      content: `任务已发起(${AGENT_DISPLAY[agent]}):${truncate(text, 80)}`,
-      taskId: task.id,
-    });
+    // task-start 事件可能已先行建过气泡,防重复
+    if (!this.store.hasConversationTaskMessage(convId, task.id)) {
+      this.pushMessage(convId, {
+        agent,
+        role: 'task',
+        content: `任务已发起(${AGENT_DISPLAY[agent]}):${truncate(text, 80)}`,
+        taskId: task.id,
+      });
+    }
     return { message: userMsg, task };
   }
 
@@ -151,7 +158,19 @@ export class ConversationManager {
     if (!convId) return;
 
     if (e.kind === 'assistant-message') {
+      this.taskAssistantSeen.set(taskId, true);
       this.pushMessage(convId, { agent: e.agent, role: 'assistant', content: e.summary, taskId });
+    } else if (e.kind === 'error') {
+      // 任务过程中的错误必须可见,否则"任务完成"却无输出无从解释
+      this.pushMessage(convId, { agent: e.agent, role: 'system', content: `⚠️ ${e.summary}`, taskId });
+    } else if (e.kind === 'task-start') {
+      // 外部派活(带 conversationId 的任务)也进对话气泡;
+      // 注意:事件可能早于 send() 登记 taskConv,以库中是否已有气泡为准防重复
+      if (!this.taskConv.has(taskId) && !this.store.hasConversationTaskMessage(convId, taskId)) {
+        this.taskConv.set(taskId, convId);
+        this.taskAssistantSeen.set(taskId, false);
+        this.pushMessage(convId, { agent: e.agent, role: 'task', content: `任务已发起(${AGENT_DISPLAY[e.agent]}):${truncate(e.summary.replace(/^发起任务:/, ''), 80)}`, taskId });
+      }
     } else if (e.kind === 'session-start') {
       this.store.setConversationAgent(convId, e.agent, e.sessionId, e.projectDir);
     } else if (e.kind === 'task-end') {
@@ -159,7 +178,17 @@ export class ConversationManager {
       const detail = e.summary === '任务完成' || e.summary === '任务已打断' ? '' : `:${truncate(e.summary, 80)}`;
       this.store.updateConversationTaskMessage(taskId, `任务${label}${detail}`, e.ts);
       this.store.touchConversation(convId, e.ts);
+      // 收尾必反馈:无助手输出(网络/权限中断)时补一条系统气泡
+      if (this.taskAssistantSeen.get(taskId) === false && label !== '已打断') {
+        this.pushMessage(convId, {
+          agent: e.agent,
+          role: 'system',
+          content: `任务${label}但未收到助手输出(可能因网络/权限中断,详见上方错误提示)。可勾选「完全自主」后重试。`,
+          taskId,
+        });
+      }
       this.taskConv.delete(taskId);
+      this.taskAssistantSeen.delete(taskId);
       if (this.convTask.get(convId) === taskId) this.convTask.delete(convId);
     }
   }
@@ -186,6 +215,8 @@ export class ConversationManager {
       const who = m.role === 'user' ? '用户' : AGENT_DISPLAY[m.agent ?? 'dsh'] ?? '助手';
       return `[${who}] ${truncate(m.content, SUMMARY_CHARS)}`;
     });
-    return `[对话背景] 以下是本对话此前的交流摘要,请基于它继续回答,不要复述背景:\n${lines.join('\n')}`;
+    // 跨 Agent 派活约定:走本机 OpenHarness API 且带上 conversationId,结果才能回流本对话
+    const delegation = `\n[协作约定] 如需给其他特工派活,请调用本机 API:POST http://127.0.0.1:3900/api/tasks,body 为 {"agent":"claude|codex|cursor|dsh","cwd":"<工作目录>","prompt":"<任务>","bypassPermissions":true,"conversationId":"${convId}"}(conversationId 必带,任务结果才能回到本对话)。`;
+    return `[对话背景] 以下是本对话此前的交流摘要,请基于它继续回答,不要复述背景:\n${lines.join('\n')}${delegation}`;
   }
 }

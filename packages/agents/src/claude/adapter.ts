@@ -118,17 +118,29 @@ export class ClaudeAdapter implements AgentAdapter {
     let sessionId: string | null = null;
     let settled = false;
     let errTail = '';
+    let lastAssistant = '';
 
     const settle = (exitCode: number | null, state: 'done' | 'error') => {
       if (settled) return;
       settled = true;
+      // headless 模式无人批准权限请求:检测到"权限被拦"时把任务显性标记为失败,
+      // 否则会出现"任务完成但报告没写出来"的假成功
+      const blocked = /权限|permission|approval|授权/i.test(`${lastAssistant} ${errTail}`);
+      if (state === 'done' && blocked) {
+        state = 'error';
+      }
       onEvent({
         ts: Date.now(),
         agent: 'claude',
         projectDir: opts.cwd,
         sessionId: sessionId ?? id,
         kind: 'task-end',
-        summary: state === 'done' ? '任务完成' : `任务异常退出${errTail ? ':' + truncate(errTail, 160) : ''}`,
+        summary:
+          state === 'done'
+            ? '任务完成'
+            : blocked
+              ? `任务被权限请求拦截(headless 无法批准):${truncate(lastAssistant || errTail, 120)}。勾选「完全自主」后重试即可`
+              : `任务异常退出${errTail ? ':' + truncate(errTail, 160) : ''}`,
         meta: { taskId: id, conversationId: opts.conversationId, exitCode, state },
       });
     };
@@ -162,6 +174,7 @@ export class ClaudeAdapter implements AgentAdapter {
       // stream-json 的消息体结构与 jsonl 一致,直接复用归一化器
       for (const e of normalizeRecord(rec)) {
         if (e.kind === 'user-message') continue; // 工具结果回显太噪,略过
+        if (e.kind === 'assistant-message') lastAssistant = e.summary;
         onEvent({ ...e, sessionId: sessionId ?? e.sessionId, meta: { ...e.meta, taskId: id, conversationId: opts.conversationId } });
       }
     });

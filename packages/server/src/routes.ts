@@ -77,6 +77,7 @@ export function createApp(deps: AppDeps): { app: Hono; nodeWs: NodeWebSocket } {
       model?: string;
       queue?: boolean;
       bypassPermissions?: boolean;
+      conversationId?: string;
     }>();
     const agent = body.agent as TaskInfo['agent'] | undefined;
     if (!agent || !AGENT_DISPLAY[agent]) return c.json({ error: '未知的 Agent' }, 400);
@@ -91,6 +92,7 @@ export function createApp(deps: AppDeps): { app: Hono; nodeWs: NodeWebSocket } {
       prompt: body.prompt.trim(),
       model: body.model,
       bypassPermissions: body.bypassPermissions === true,
+      conversationId: typeof body.conversationId === 'string' ? body.conversationId : undefined,
     };
     const info = body.queue
       ? await tasks.enqueue(adapter, opts)

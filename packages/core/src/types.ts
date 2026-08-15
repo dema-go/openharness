@@ -103,6 +103,8 @@ export interface LaunchOptions {
   cwd: string;
   prompt: string;
   model?: string;
+  /** 展示用的原始任务文案(对话室注入摘要时,prompt 含背景,气泡/活动流用这个) */
+  displayPrompt?: string;
   /** 控制台任务 ID:适配器在事件 meta 中回传,供任务状态归因 */
   taskId: string;
   /** 续接的原生会话 ID(对话室连续对话:经各工具原生 --resume 续接) */

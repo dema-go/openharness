@@ -47,6 +47,8 @@ export function ConversationPanel(props: {
   const [error, setError] = useState<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const seenSeqs = useRef(new Set<number>());
+  const [atBottom, setAtBottom] = useState(true);
+  const pendingRestore = useRef<{ height: number; top: number } | null>(null);
 
   const loadConversations = useCallback(async () => {
     const list = await api.conversations();
@@ -58,6 +60,7 @@ export function ConversationPanel(props: {
     setActiveId(id);
     setMsgs([]);
     setError(null);
+    setAtBottom(true);
     seenSeqs.current = new Set();
     try {
       const page = await api.conversationMessages(id, { limit: 100 });
@@ -107,11 +110,35 @@ export function ConversationPanel(props: {
     }
   }, [liveMessages, activeId, addMessage]);
 
-  // 自动滚动到底部
+  // 自动跟随:仅在用户本来就停在底部时才吸底(读历史时不被新消息拽走)
   useEffect(() => {
     const el = scroller.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el && atBottom) el.scrollTop = el.scrollHeight;
+  }, [msgs, atBottom]);
+
+  // 加载更早后保持视口位置
+  useEffect(() => {
+    const el = scroller.current;
+    const pending = pendingRestore.current;
+    if (el && pending) {
+      el.scrollTop = el.scrollHeight - pending.height + pending.top;
+      pendingRestore.current = null;
+    }
   }, [msgs]);
+
+  const handleScroll = () => {
+    const el = scroller.current;
+    if (!el) return;
+    setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 48);
+  };
+
+  const scrollToBottom = () => {
+    const el = scroller.current;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+      setAtBottom(true);
+    }
+  };
 
   useEffect(() => {
     if (projectDirs[0] && !cwd) setCwd(projectDirs[0]);
@@ -136,6 +163,8 @@ export function ConversationPanel(props: {
   const loadOlder = async () => {
     if (!activeId || !hasMore || msgs.length === 0) return;
     const oldest = Math.min(...msgs.map((m) => m.seq));
+    const el = scroller.current;
+    pendingRestore.current = el ? { height: el.scrollHeight, top: el.scrollTop } : { height: 0, top: 0 };
     try {
       const page = await api.conversationMessages(activeId, { limit: 100, beforeSeq: oldest });
       setHasMore(page.hasMore);
@@ -145,7 +174,7 @@ export function ConversationPanel(props: {
         return [...page.messages.filter((m) => !seen.has(m.seq)), ...prev];
       });
     } catch {
-      /* 忽略 */
+      pendingRestore.current = null;
     }
   };
 
@@ -164,6 +193,7 @@ export function ConversationPanel(props: {
       addMessage(message);
       onTask(task);
       setInput('');
+      scrollToBottom();
     } catch (err) {
       setError(err instanceof Error ? err.message : '发送失败');
     } finally {
@@ -268,31 +298,43 @@ export function ConversationPanel(props: {
           </div>
         </div>
 
-        <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-          {hasMore && (
-            <button type="button" onClick={() => void loadOlder()} className="mb-2 block w-full text-center font-mono text-[10.5px] text-faint hover:text-dim">
-              ▲ 加载更早
+        <div className="relative min-h-0 flex-1">
+          <div ref={scroller} onScroll={handleScroll} className="h-full overflow-y-auto px-4 py-3">
+            {hasMore && (
+              <button type="button" onClick={() => void loadOlder()} className="mb-2 block w-full text-center font-mono text-[10.5px] text-faint hover:text-dim">
+                ▲ 加载更早
+              </button>
+            )}
+            {msgs.length === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+                <AgentAvatar agent={agent} size={56} />
+                <p className="bubble font-display text-[13px] text-ink">
+                  选择一个对话开始;选好特工,像聊天一样持续问答——上下文一直带着!
+                </p>
+              </div>
+            ) : (
+              <ul className="space-y-2.5">
+                {msgs.map((m) => (
+                  <MessageBubble key={m.seq} m={m} />
+                ))}
+                {sending && (
+                  <li className="flex items-center gap-2">
+                    <AgentAvatar agent={agent} size={26} />
+                    <span className="font-mono text-[11px] text-faint animate-pulse">{AGENT_CHARACTER[agent].name} 思考中…</span>
+                  </li>
+                )}
+              </ul>
+            )}
+          </div>
+          {!atBottom && msgs.length > 0 && (
+            <button
+              type="button"
+              onClick={scrollToBottom}
+              className="sticker absolute bottom-3 right-5 z-10 bg-red text-white"
+              style={{ boxShadow: '3px 3px 0 #221D15' }}
+            >
+              ↓ 新消息
             </button>
-          )}
-          {msgs.length === 0 ? (
-            <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
-              <AgentAvatar agent={agent} size={56} />
-              <p className="bubble font-display text-[13px] text-ink">
-                选择一个对话开始;选好特工,像聊天一样持续问答——上下文一直带着!
-              </p>
-            </div>
-          ) : (
-            <ul className="space-y-2.5">
-              {msgs.map((m) => (
-                <MessageBubble key={m.seq} m={m} />
-              ))}
-              {sending && (
-                <li className="flex items-center gap-2">
-                  <AgentAvatar agent={agent} size={26} />
-                  <span className="font-mono text-[11px] text-faint animate-pulse">{AGENT_CHARACTER[agent].name} 思考中…</span>
-                </li>
-              )}
-            </ul>
           )}
         </div>
 

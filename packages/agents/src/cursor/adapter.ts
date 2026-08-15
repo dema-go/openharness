@@ -198,10 +198,16 @@ export class CursorAdapter implements AgentAdapter {
     const settle = (exitCode: number | null, state: 'done' | 'error') => {
       if (settled) return;
       settled = true;
+      // 常见失败原因映射为可操作提示
+      const hint = /Authentication required/i.test(errTail)
+        ? `cursor-agent 未登录:请在终端执行 cursor-agent login(与 Cursor IDE 登录态不共享),或设置 CURSOR_API_KEY 环境变量后重试`
+        : errTail.includes('ENOENT')
+          ? '未找到 cursor-agent,请先安装(brew install cursor-agent 或 Cursor IDE 内置)'
+          : '';
       onEvent({
         ts: Date.now(), agent: 'cursor', projectDir: opts.cwd, sessionId: sessionId ?? id,
         kind: 'task-end',
-        summary: state === 'done' ? '任务完成' : `任务异常退出${errTail ? ':' + truncate(errTail, 160) : ''}`,
+        summary: state === 'done' ? '任务完成' : hint || `任务异常退出${errTail ? ':' + truncate(errTail, 160) : ''}`,
         meta: { taskId: id, conversationId: opts.conversationId, exitCode, state },
       });
     };
