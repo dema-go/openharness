@@ -3,6 +3,7 @@
  * 仅存索引与聚合,不复制任何工具的原始会话数据。
  */
 import Database from 'better-sqlite3';
+import { createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import type {
@@ -102,6 +103,11 @@ export class Store implements CursorStore {
     if (!cols.some((c) => c.name === 'model')) {
       this.db.exec('ALTER TABLE events ADD COLUMN model TEXT');
     }
+    // 迁移:补 fingerprint 列(内容指纹,发射路径与文件监听路径的去重依据)
+    if (!cols.some((c) => c.name === 'fingerprint')) {
+      this.db.exec('ALTER TABLE events ADD COLUMN fingerprint TEXT');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_events_fingerprint ON events(fingerprint)');
+    }
   }
 
   // ---- CursorStore ----
@@ -133,10 +139,25 @@ export class Store implements CursorStore {
       .run(s);
   }
 
-  sessions(opts: { agent?: string; limit?: number } = {}): SessionSummary[] {
-    const { agent, limit = 100 } = opts;
-    const where = agent ? 'WHERE agent = ?' : '';
-    const params = agent ? [agent] : [];
+  sessions(opts: { agent?: string; q?: string; beforeTs?: number; limit?: number; includeEmpty?: boolean } = {}): SessionSummary[] {
+    const { agent, q, beforeTs, limit = 100, includeEmpty = false } = opts;
+    const clauses: string[] = [];
+    const params: Array<string | number> = [];
+    if (agent) {
+      clauses.push('agent = ?');
+      params.push(agent);
+    }
+    if (q) {
+      clauses.push('(title LIKE ? OR project_dir LIKE ? OR session_id LIKE ?)');
+      const like = `%${q}%`;
+      params.push(like, like, like);
+    }
+    if (beforeTs !== undefined) {
+      clauses.push('last_ts < ?');
+      params.push(beforeTs);
+    }
+    if (!includeEmpty) clauses.push('message_count > 0');
+    const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
     const rows = this.db
       .prepare(`SELECT * FROM sessions ${where} ORDER BY last_ts DESC LIMIT ?`)
       .all(...params, limit) as Array<Record<string, unknown>>;
@@ -154,19 +175,47 @@ export class Store implements CursorStore {
     }));
   }
 
-  sessionsCount(agent?: string): number {
+  sessionsCount(opts: { agent?: string; q?: string; includeEmpty?: boolean } = {}): number {
+    const { agent, q, includeEmpty = false } = opts;
+    const clauses: string[] = [];
+    const params: Array<string> = [];
+    if (agent) {
+      clauses.push('agent = ?');
+      params.push(agent);
+    }
+    if (q) {
+      clauses.push('(title LIKE ? OR project_dir LIKE ? OR session_id LIKE ?)');
+      const like = `%${q}%`;
+      params.push(like, like, like);
+    }
+    if (!includeEmpty) clauses.push('message_count > 0');
+    const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
     const row = this.db
-      .prepare(agent ? 'SELECT COUNT(*) AS n FROM sessions WHERE agent = ?' : 'SELECT COUNT(*) AS n FROM sessions')
-      .get(...(agent ? [agent] : [])) as { n: number };
+      .prepare(`SELECT COUNT(*) AS n FROM sessions ${where}`)
+      .get(...params) as { n: number };
     return row.n;
   }
 
   // ---- events ----
   insertEvent(e: HarnessEvent & { model?: string }): number {
+    // 内容指纹去重:同一条真实消息经"发射路径"(stdout 流)与"文件监听路径"(会话文件)
+    // 各入库一次是重复的根源;按 agent+session+kind+全文 计算指纹,存在即跳过。
+    // 代价:同一会话里逐字相同的消息只会记一条(对"重试"类消息是合理收敛)。
+    const fullText = typeof e.meta?.fullText === 'string' ? e.meta.fullText.trim() : '';
+    const fpBase = (e.kind === 'assistant-message' || e.kind === 'user-message')
+      ? `${e.agent}|${e.sessionId}|${e.kind}|${fullText || e.summary}`
+      : '';
+    const fingerprint = fpBase ? createHash('sha1').update(fpBase).digest('hex') : null;
+    if (fingerprint) {
+      const dup = this.db.prepare('SELECT seq FROM events WHERE fingerprint = ? LIMIT 1').get(fingerprint) as
+        | { seq: number }
+        | undefined;
+      if (dup) return dup.seq;
+    }
     const info = this.db
       .prepare(
-        `INSERT INTO events (ts, agent, session_id, kind, summary, project_dir, input_tokens, output_tokens, model, meta_json)
-         VALUES (@ts, @agent, @sessionId, @kind, @summary, @projectDir, @inputTokens, @outputTokens, @model, @metaJson)`,
+        `INSERT INTO events (ts, agent, session_id, kind, summary, project_dir, input_tokens, output_tokens, model, meta_json, fingerprint)
+         VALUES (@ts, @agent, @sessionId, @kind, @summary, @projectDir, @inputTokens, @outputTokens, @model, @metaJson, @fingerprint)`,
       )
       .run({
         ...e,
@@ -174,8 +223,43 @@ export class Store implements CursorStore {
         outputTokens: e.usage?.output ?? null,
         model: e.model ?? null,
         metaJson: e.meta ? JSON.stringify(e.meta) : null,
+        fingerprint,
       });
     return Number(info.lastInsertRowid);
+  }
+
+  /** 一次性:清理历史重复事件(去重列上线前入库的)。返回删除条数。 */
+  dedupeExistingEvents(): number {
+    const rows = this.db
+      .prepare(
+        `SELECT seq, agent, session_id, kind, summary, meta_json FROM events
+         WHERE kind IN ('assistant-message', 'user-message') ORDER BY seq ASC`,
+      )
+      .all() as Array<Record<string, unknown>>;
+    const seen = new Set<string>();
+    const dups: number[] = [];
+    for (const r of rows) {
+      let fullText = '';
+      try {
+        const meta = r.meta_json ? (JSON.parse(r.meta_json as string) as Record<string, unknown>) : undefined;
+        fullText = typeof meta?.fullText === 'string' ? meta.fullText.trim() : '';
+      } catch {
+        /* 忽略坏 meta */
+      }
+      const fp = createHash('sha1')
+        .update(`${r.agent}|${r.session_id}|${r.kind}|${fullText || r.summary}`)
+        .digest('hex');
+      if (seen.has(fp)) dups.push(r.seq as number);
+      else seen.add(fp);
+    }
+    if (dups.length) {
+      const del = this.db.prepare('DELETE FROM events WHERE seq = ?');
+      const tx = this.db.transaction(() => {
+        for (const seq of dups) del.run(seq);
+      });
+      tx();
+    }
+    return dups.length;
   }
 
   events(opts: { limit?: number; agent?: string; session?: string; sinceSeq?: number } = {}): HarnessEvent[] {
@@ -291,7 +375,7 @@ export class Store implements CursorStore {
         )
         .all(...params) as Array<{ m: string; agent: string; i: number; o: number }>
     ).map((r) => ({ model: r.m, agent: r.agent as UsageReport['byModel'][number]['agent'], input: r.i, output: r.o }));
-    const byDay = (
+    const byDayRows = (
       this.db
         .prepare(
           `SELECT date(ts/1000,'unixepoch','localtime') AS day,
@@ -299,7 +383,9 @@ export class Store implements CursorStore {
            FROM events ${w} GROUP BY day ORDER BY day ASC`,
         )
         .all(...params) as Array<{ day: string; i: number; o: number }>
-    ).map((r) => ({ day: r.day, input: r.i, output: r.o }));
+    );
+    // 按天轴补零:范围内每一天都有数据点,避免有数据的日期挤在一起被误读为连续
+    const byDay = fillDayAxis(byDayRows, from, to).map((r) => ({ day: r.day, input: r.i, output: r.o }));
     const byProject = (
       this.db
         .prepare(
@@ -555,4 +641,35 @@ export interface UsageReport {
   byModel: Array<{ model: string; agent: string; input: number; output: number }>;
   byDay: Array<{ day: string; input: number; output: number }>;
   byProject: Array<{ project: string; input: number; output: number }>;
+}
+
+/** 按天聚合补零:from/to 为毫秒时间戳,缺省时以事件最早时间到今天为轴 */
+function fillDayAxis(
+  rows: Array<{ day: string; i: number; o: number }>,
+  from?: number,
+  to?: number,
+): Array<{ day: string; i: number; o: number }> {
+  const map = new Map(rows.map((r) => [r.day, r]));
+  let start = from;
+  let end = to;
+  if (start === undefined || end === undefined) {
+    const range = rows.length ? rows : undefined;
+    if (range && range.length > 0) {
+      start = new Date(`${range[0]!.day}T00:00:00`).getTime();
+      end = new Date(`${range[range.length - 1]!.day}T00:00:00`).getTime();
+    }
+  }
+  if (start === undefined || end === undefined) return rows;
+  const out: Array<{ day: string; i: number; o: number }> = [];
+  const fmt = (t: number): string => {
+    const d = new Date(t);
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${d.getFullYear()}-${m}-${day}`;
+  };
+  for (let t = start; t <= end; t += 86400_000) {
+    const key = fmt(t);
+    out.push(map.get(key) ?? { day: key, i: 0, o: 0 });
+  }
+  return out;
 }

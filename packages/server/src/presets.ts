@@ -8,7 +8,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { AgentId, AgentPreset, AgentPresetPublic } from '@openharness/core';
-import { isSecretKey, maskSecret } from '@openharness/core';
+import { isSecretKey } from '@openharness/core';
 
 export class PresetStore {
   private readonly file: string;
@@ -33,11 +33,11 @@ export class PresetStore {
     writeFileSync(this.file, `${JSON.stringify(this.presets, null, 2)}\n`, 'utf8');
   }
 
-  /** 下发形态:密钥值脱敏 */
+  /** 下发形态:密钥值不返回任何片段 */
   private toPublic(p: AgentPreset): AgentPresetPublic {
     const values: Record<string, string> = {};
     for (const [k, v] of Object.entries(p.values)) {
-      values[k] = isSecretKey(k) ? maskSecret(v) : v;
+      values[k] = isSecretKey(k) ? '••••••••(已保存)' : v;
     }
     return { id: p.id, name: p.name, agent: p.agent, values, createdAt: p.createdAt };
   }

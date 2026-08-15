@@ -147,7 +147,7 @@ export function ActivityFeed(props: {
       <div className="comic-card flex min-h-0 flex-1 flex-col overflow-hidden">
         {/* 面板头:标签页 + 过滤贴纸 */}
         <div className="shrink-0 border-b-[3px] border-ink px-4 py-2">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h2 className="font-display text-[15px] text-ink">实时活动流</h2>
             <span className="sticker rotate-2 bg-red text-white">LIVE</span>
             <span className="font-mono text-[11px] text-faint tabular-nums">
@@ -261,11 +261,11 @@ export function ActivityFeed(props: {
                       >
                         {EVENT_KIND_LABEL[e.kind]}
                       </span>
-                      <span className="mt-1 w-[62px] shrink-0 font-mono text-[10.5px] text-faint tabular-nums">
+                      <span className="mt-1 w-[62px] shrink-0 font-mono text-[10.5px] text-faint tabular-nums max-sm:hidden">
                         {fmtTime(e.ts)}
                       </span>
                       <span
-                        className="mt-1 w-[96px] shrink-0 truncate font-display text-[12px]"
+                        className="mt-1 w-[96px] shrink-0 truncate font-display text-[12px] max-sm:w-16"
                         style={{ color: AGENT_CHARACTER[e.agent].color }}
                         title={AGENT_DISPLAY[e.agent]}
                       >

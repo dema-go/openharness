@@ -149,9 +149,11 @@ export interface ConfigFieldDef {
   label: string;
   type: 'string' | 'select';
   secret?: boolean;
+  /** 密钥是否已设置(secret 字段绝不回传任何值片段) */
+  hasValue?: boolean;
   /** type=select 时的可选项 */
   options?: string[];
-  /** 当前值:secret 字段已脱敏;未设置的字段为空串 */
+  /** 当前值:secret 字段恒为空串;未设置的字段为空串 */
   value: string;
   /** 展示分组 */
   group: string;

@@ -152,21 +152,26 @@ export function UsagePanel(): React.JSX.Element {
             <p className="mt-3 text-[12px] text-faint">暂无数据</p>
           ) : (
             <div className="mt-3 flex h-32 items-end gap-1">
-              {byDay.map((d) => (
-                <div
-                  key={d.day}
-                  className="group flex min-w-0 flex-1 flex-col items-stretch"
-                  title={`${d.day} · 入 ${fmtTokens(d.input)} · 出 ${fmtTokens(d.output)}`}
-                >
-                  <div className="flex h-24 items-end gap-px">
-                    <div className="halftone w-1/2 rounded-t-sm border-2 border-b-0 border-ink bg-red" style={{ height: `${(d.input / dayMax) * 100}%` }} />
-                    <div className="halftone w-1/2 rounded-t-sm border-2 border-b-0 border-ink bg-blue" style={{ height: `${(d.output / dayMax) * 100}%` }} />
+              {byDay.map((d, i) => {
+                // 范围较长时抽稀日期标签,数据柱仍逐日完整
+                const step = byDay.length > 45 ? Math.ceil(byDay.length / 28) : 1;
+                const showLabel = i % step === 0 || i === byDay.length - 1;
+                return (
+                  <div
+                    key={d.day}
+                    className="group flex min-w-0 flex-1 flex-col items-stretch"
+                    title={`${d.day} · 入 ${fmtTokens(d.input)} · 出 ${fmtTokens(d.output)}`}
+                  >
+                    <div className="flex h-24 items-end gap-px">
+                      <div className="halftone w-1/2 rounded-t-sm border-2 border-b-0 border-ink bg-red" style={{ height: `${(d.input / dayMax) * 100}%` }} />
+                      <div className="halftone w-1/2 rounded-t-sm border-2 border-b-0 border-ink bg-blue" style={{ height: `${(d.output / dayMax) * 100}%` }} />
+                    </div>
+                    <span className="mt-1 text-center font-mono text-[9px] text-faint tabular-nums">
+                      {showLabel ? d.day.slice(5) : ''}
+                    </span>
                   </div>
-                  <span className="mt-1 text-center font-mono text-[9px] text-faint tabular-nums">
-                    {d.day.slice(5)}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
           <p className="mt-3 flex items-center gap-4 font-mono text-[10px] text-faint">

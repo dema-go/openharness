@@ -62,6 +62,8 @@ export class ClaudeAdapter implements AgentAdapter {
         const r = await parseSessionFile(f.filePath, { offset: start, onEvent: handlers.onEvent });
         this.offsets.set(f.filePath, r.offset);
         this.cursorStore?.set(f.filePath, r.offset);
+        // 已消费完的文件跳过汇总:否则空解析把库里汇总覆盖成 messageCount=0
+        if (start > 0 && r.messageCount === 0 && r.offset <= start) continue;
         handlers.onSummary(this.toSummary(r));
       } catch {
         // 跳过损坏文件
@@ -282,7 +284,9 @@ export class ClaudeAdapter implements AgentAdapter {
       label,
       type: 'string',
       group: '模型接入',
-      value: source && isSecretKey(key) ? maskSecret(source) : source,
+      // 密钥字段绝不回传任何值片段:value 恒为空,是否已设置用 hasValue 表达
+      value: isSecretKey(key) ? '' : source,
+      ...(isSecretKey(key) ? { hasValue: source !== '', secret: true } : {}),
       ...opts,
     });
     return [

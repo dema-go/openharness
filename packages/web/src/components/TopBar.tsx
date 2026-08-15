@@ -7,19 +7,19 @@ export function TopBar(props: {
   clock: string;
 }): React.JSX.Element {
   return (
-    <header className="flex h-16 shrink-0 items-center justify-between border-b-[3px] border-ink px-5">
+    <header className="flex h-16 shrink-0 items-center justify-between gap-2 border-b-[3px] border-ink px-3 sm:px-5">
       <div className="flex items-center gap-3">
         <Burst size={44} className="-rotate-6" />
         <div className="-ml-2">
           <h1
-            className="font-comic text-[22px] leading-none tracking-wide text-red"
+            className="font-comic text-[18px] leading-none tracking-wide text-red sm:text-[22px]"
             style={{ WebkitTextStroke: '1px #221D15', textShadow: '2px 2px 0 #fff' }}
           >
             OPENHARNESS
           </h1>
-          <p className="mt-0.5 font-display text-[11px] text-dim">个人 Agent 特工小队 · 控制台</p>
+          <p className="mt-0.5 hidden font-display text-[11px] text-dim sm:block">个人 Agent 特工小队 · 控制台</p>
         </div>
-        <span className="sticker -rotate-3 bg-yellow">BETA!</span>
+        <span className="sticker -rotate-3 bg-yellow max-sm:hidden">BETA!</span>
       </div>
 
       <div className="flex items-center gap-3">

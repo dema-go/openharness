@@ -2,7 +2,10 @@
  * 配置展示共用工具:对象扁平化 + 密钥脱敏。
  * 原则:配置页绝不返回任何配置文件的原文。
  */
-import { isSecretKey, maskSecret, type AgentConfigEntry } from '@openharness/core';
+import { isSecretKey, type AgentConfigEntry } from '@openharness/core';
+
+/** 脱敏占位:绝不展示密钥任何片段(首尾字符也属泄露) */
+const SECRET_PLACEHOLDER = '••••••••';
 
 export function flattenSection(obj: Record<string, unknown>, prefix = ''): AgentConfigEntry[] {
   const out: AgentConfigEntry[] = [];
@@ -13,7 +16,7 @@ export function flattenSection(obj: Record<string, unknown>, prefix = ''): Agent
     } else {
       const str = String(v ?? '');
       const secret = isSecretKey(k);
-      out.push({ key, value: secret ? maskSecret(str) : str, masked: secret });
+      out.push({ key, value: secret ? SECRET_PLACEHOLDER : str, masked: secret });
     }
   }
   return out;
@@ -45,7 +48,7 @@ export function parseTomlSections(content: string): Map<string, Map<string, stri
 
 export function entry(key: string, value: string): AgentConfigEntry {
   const secret = isSecretKey(key);
-  return secret ? { key, value: maskSecret(value), masked: true } : { key, value };
+  return secret ? { key, value: SECRET_PLACEHOLDER, masked: true } : { key, value };
 }
 
 // ---------- 配置写入(逐行补丁:保留注释与其余内容) ----------

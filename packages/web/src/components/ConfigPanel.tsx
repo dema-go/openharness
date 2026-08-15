@@ -136,7 +136,7 @@ export function ConfigPanel(): React.JSX.Element {
     <div className="min-h-0 flex-1 overflow-y-auto p-4">
       <div className="bubble mb-5 max-w-2xl font-display text-[12.5px] text-ink">
         可直接修改各工具的配置(api key / baseUrl / 模型等),写回原配置文件;还可把整套配置存为预设,
-        一键切换(参考 cc switch)。密钥明文只存本机,页面不回显;密钥字段留空即保持不变。
+        一键切换(参考 cc switch)。密钥明文只存本机,页面不回显任何片段;密钥字段留空即保持不变。
       </div>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {configs.map((cfg, i) => {
@@ -176,7 +176,7 @@ export function ConfigPanel(): React.JSX.Element {
                               <label key={f.key} className="block" title={f.hint}>
                                 <span className="mb-0.5 flex items-baseline justify-between gap-2">
                                   <span className="truncate font-mono text-[10.5px] text-dim">{f.label}</span>
-                                  {f.secret && f.value && (
+                                  {f.secret && f.hasValue && (
                                     <span className="shrink-0 font-mono text-[9px] text-green">已设置</span>
                                   )}
                                 </span>
@@ -200,8 +200,8 @@ export function ConfigPanel(): React.JSX.Element {
                                     onChange={(e) => setDraft(cfg.agent, f.key, e.target.value)}
                                     placeholder={
                                       f.secret
-                                        ? f.value
-                                          ? `${f.value}(留空不改)`
+                                        ? f.hasValue
+                                          ? '已设置(留空不改)'
                                           : '留空不改'
                                         : f.value || '未设置'
                                     }

@@ -38,7 +38,22 @@ export interface AgentConfigInfo {
 
 export const api = {
   agents: () => j<AgentStatus[]>('/agents'),
-  sessions: (agent?: string) => j<SessionSummary[]>(`/sessions${agent ? `?agent=${agent}` : ''}`),
+  sessions: (opts: { agent?: string; q?: string; before?: number; limit?: number; includeEmpty?: boolean } = {}) => {
+    const p = new URLSearchParams();
+    if (opts.agent) p.set('agent', opts.agent);
+    if (opts.q) p.set('q', opts.q);
+    if (opts.before !== undefined) p.set('before', String(opts.before));
+    if (opts.limit !== undefined) p.set('limit', String(opts.limit));
+    if (opts.includeEmpty) p.set('includeEmpty', '1');
+    const q = p.toString();
+    return j<{ sessions: SessionSummary[]; total: number }>(`/sessions${q ? `?${q}` : ''}`);
+  },
+  pickDir: (mode: 'open' | 'new') =>
+    j<{ path?: string; cancelled?: boolean }>('/pick-dir', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ mode }),
+    }),
   events: (opts: {
     agent?: string;
     session?: string;

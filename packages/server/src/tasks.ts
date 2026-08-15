@@ -121,7 +121,8 @@ export class TaskManager {
       id,
       agent: adapter.agentId,
       cwd: opts.cwd,
-      prompt: opts.prompt,
+      // 任务记录展示用户原始输入:对话室注入的[对话背景]/协作约定不得混入
+      prompt: opts.displayPrompt ?? opts.prompt,
       sessionId: null,
       state: 'running',
       startedAt: Date.now(),

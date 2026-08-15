@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { AgentId, HarnessEvent, SessionSummary } from '@openharness/core';
 import { EVENT_KIND_LABEL } from '@openharness/core';
 import { api } from '../lib/api';
@@ -34,38 +34,76 @@ function basename(p: string | null): string {
 }
 
 export function SessionsPanel(props: {
-  sessions: SessionSummary[];
   onResume: (agent: AgentId, sessionId: string, cwd: string | null, title: string) => void;
 }): React.JSX.Element {
-  const { sessions, onResume } = props;
+  const { onResume } = props;
+  const [sessions, setSessions] = useState<SessionSummary[] | null>(null);
+  const [total, setTotal] = useState(0);
   const [agentFilter, setAgentFilter] = useState<AgentId | 'all'>('all');
   const [query, setQuery] = useState('');
+  const [includeEmpty, setIncludeEmpty] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [selected, setSelected] = useState<SessionSummary | null>(null);
 
-  const visible = useMemo(
-    () =>
-      sessions
-        .filter((s) => agentFilter === 'all' || s.agent === agentFilter)
-        .filter((s) => {
-          const q = query.trim().toLowerCase();
-          if (!q) return true;
-          return (
-            s.title.toLowerCase().includes(q) ||
-            (s.projectDir ?? '').toLowerCase().includes(q) ||
-            s.sessionId.toLowerCase().includes(q)
-          );
-        })
-        .slice(0, 200),
-    [sessions, agentFilter, query],
-  );
+  const fetchPage = useCallback(async (q: string, agent: AgentId | 'all', empty: boolean) => {
+    const opts: Parameters<typeof api.sessions>[0] = { limit: 100 };
+    if (agent !== 'all') opts.agent = agent;
+    if (q.trim()) opts.q = q.trim();
+    if (empty) opts.includeEmpty = true;
+    try {
+      const res = await api.sessions(opts);
+      setSessions(res.sessions);
+      setTotal(res.total);
+    } catch {
+      setSessions([]);
+      setTotal(0);
+    }
+  }, []);
+
+  const loadOlder = useCallback(async () => {
+    if (!sessions || sessions.length === 0 || loadingOlder) return;
+    const oldest = Math.min(...sessions.map((s) => s.lastTs));
+    setLoadingOlder(true);
+    try {
+      const res = await api.sessions({
+        agent: agentFilter === 'all' ? undefined : agentFilter,
+        q: query.trim() || undefined,
+        includeEmpty: includeEmpty || undefined,
+        before: oldest,
+        limit: 100,
+      });
+      setSessions((prev) => {
+        const seen = new Set((prev ?? []).map((s) => `${s.agent}:${s.sessionId}`));
+        return [...(prev ?? []), ...res.sessions.filter((s) => !seen.has(`${s.agent}:${s.sessionId}`))];
+      });
+      setTotal(res.total);
+    } catch {
+      /* 忽略 */
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [sessions, loadingOlder, agentFilter, query, includeEmpty]);
+
+  // 筛选/搜索/空会话开关变化:重置为第一页(搜索防抖 300ms)
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSessions(null);
+      void fetchPage(query, agentFilter, includeEmpty);
+    }, query ? 300 : 0);
+    return () => clearTimeout(t);
+  }, [fetchPage, query, agentFilter, includeEmpty]);
+
+  const hasMore = sessions !== null && sessions.length < total;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col p-4">
       <div className="comic-card flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="flex h-12 shrink-0 items-center gap-2 border-b-[3px] border-ink px-4">
           <h2 className="font-display text-[15px] text-ink">会话档案</h2>
-          <span className="font-mono text-[11px] text-faint tabular-nums">{visible.length}</span>
-          <div className="ml-3 flex items-center gap-1.5">
+          <span className="font-mono text-[11px] text-faint tabular-nums">
+            {sessions === null ? '…' : `已加载 ${sessions.length} / 共 ${total}`}
+          </span>
+          <div className="ml-3 flex flex-wrap items-center gap-1.5">
             {(['all', 'claude', 'codex', 'cursor', 'dsh'] as const).map((f) => (
               <button
                 key={f}
@@ -80,48 +118,73 @@ export function SessionsPanel(props: {
               </button>
             ))}
           </div>
+          <label className="ml-1 flex cursor-pointer items-center gap-1" title="默认隐藏消息数为 0 的空会话(多为残留的空 rollout 文件)">
+            <input
+              type="checkbox"
+              checked={includeEmpty}
+              onChange={(e) => setIncludeEmpty(e.target.checked)}
+              className="h-3.5 w-3.5 accent-red"
+            />
+            <span className="font-mono text-[10px] text-dim">含空会话</span>
+          </label>
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜标题 / 项目 / 会话 ID"
-            className="comic-input ml-auto w-64 py-1 text-[11px]"
+            placeholder="搜标题 / 项目 / 会话 ID(全量)"
+            className="comic-input ml-auto w-64 py-1 text-[11px] max-sm:w-32"
           />
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {visible.length === 0 ? (
+          {sessions === null ? (
+            <div className="flex h-full items-center justify-center">
+              <p className="font-mono text-[12px] text-faint">翻档案中…</p>
+            </div>
+          ) : sessions.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-4 px-8 text-center">
               <div className="bubble font-display text-[13px] text-ink">
                 档案柜空空的!换个筛选,或去特工那里开一段新会话~
               </div>
             </div>
           ) : (
-            <ul className="p-3">
-              {visible.map((s) => (
-                <li key={`${s.agent}-${s.sessionId}`} className="mb-2 last:mb-0">
-                  <button
-                    type="button"
-                    onClick={() => setSelected(s)}
-                    className="flex w-full items-center gap-3 rounded-xl border-[3px] border-ink bg-white px-3 py-2.5 text-left transition-colors hover:bg-panel2"
-                    style={{ boxShadow: '2px 2px 0 #221D15' }}
-                  >
-                    <AgentAvatar agent={s.agent} size={34} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate font-display text-[13.5px] text-ink">{s.title}</span>
-                      <span className="block truncate font-mono text-[10.5px] text-faint">
-                        {AGENT_CHARACTER[s.agent].name} · {basename(s.projectDir) || '—'}
+            <>
+              <ul className="p-3">
+                {sessions.map((s) => (
+                  <li key={`${s.agent}-${s.sessionId}`} className="mb-2 last:mb-0">
+                    <button
+                      type="button"
+                      onClick={() => setSelected(s)}
+                      className="flex w-full items-center gap-3 rounded-xl border-[3px] border-ink bg-white px-3 py-2.5 text-left transition-colors hover:bg-panel2"
+                      style={{ boxShadow: '2px 2px 0 #221D15' }}
+                    >
+                      <AgentAvatar agent={s.agent} size={34} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-display text-[13.5px] text-ink">{s.title}</span>
+                        <span className="block truncate font-mono text-[10.5px] text-faint">
+                          {AGENT_CHARACTER[s.agent].name} · {basename(s.projectDir) || '—'}
+                        </span>
                       </span>
-                    </span>
-                    <span className="shrink-0 font-mono text-[10.5px] text-faint tabular-nums">
-                      {s.messageCount} 条
-                    </span>
-                    <span className="w-[96px] shrink-0 text-right font-mono text-[10.5px] text-faint tabular-nums">
-                      {fmtTime(s.lastTs)}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+                      <span className="shrink-0 font-mono text-[10.5px] text-faint tabular-nums">
+                        {s.messageCount} 条
+                      </span>
+                      <span className="w-[96px] shrink-0 text-right font-mono text-[10.5px] text-faint tabular-nums">
+                        {fmtTime(s.lastTs)}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {hasMore && (
+                <button
+                  type="button"
+                  onClick={() => void loadOlder()}
+                  disabled={loadingOlder}
+                  className="block w-full border-t-2 border-dashed border-faint/50 py-1.5 text-center font-mono text-[11px] text-dim transition-colors hover:text-ink disabled:opacity-40"
+                >
+                  {loadingOlder ? '翻旧档中…' : '▼ 加载更早'}
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>

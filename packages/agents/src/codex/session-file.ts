@@ -9,7 +9,7 @@
 import { createReadStream, promises as fs } from 'node:fs';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
-import { truncate, type HarnessEvent } from '@openharness/core';
+import { extractUserPrompt, isInjectedSystemText, truncate, type HarnessEvent } from '@openharness/core';
 
 export interface ParseResult {
   /** 对话级会话 ID(session_meta.session_id),用于 resume */
@@ -64,7 +64,10 @@ export function normalizeRecord(rec: Record<string, unknown>): HarnessEvent[] {
           .join('\n')
           .trim();
         if (role === 'user') {
-          return text ? [{ ...base, kind: 'user-message', summary: truncate(text) }] : [];
+          // recommended_plugins / app-context 等系统注入不算用户消息
+          if (text && isInjectedSystemText(text)) return [];
+          const real = extractUserPrompt(text);
+          return text ? [{ ...base, kind: 'user-message', summary: truncate(real), meta: { fullText: real } }] : [];
         }
         if (role === 'assistant') {
           if (text) return [{ ...base, kind: 'assistant-message', summary: truncate(text), usage, meta: { fullText: text } }];

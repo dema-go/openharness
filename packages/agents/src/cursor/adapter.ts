@@ -24,6 +24,7 @@ import {
   type LaunchOptions,
   type SessionSummary,
   type TaskHandle,
+  isInjectedSystemText,
   truncate,
 } from '@openharness/core';
 
@@ -104,6 +105,7 @@ function normalizeStreamRecord(rec: Record<string, unknown>): HarnessEvent[] {
   }
   if (type === 'user') {
     const text = collectText((rec.message as { content?: unknown } | undefined)?.content);
+    if (text && isInjectedSystemText(text)) return [];
     return text ? [{ ...base, kind: 'user-message', summary: truncate(text) }] : [];
   }
   return [];

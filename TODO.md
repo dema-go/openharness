@@ -89,3 +89,17 @@
 - [x] 4.4 修复:四适配器事件 meta 携带 fullText;对话回填优先用全文
 - [x] 4.5 验证:dsh 任务完成→状态卡持续 idle;1091 字回复气泡完整
 - [x] 4.6 回标 + CHANGELOG + README + commit + push
+
+## 第 5 轮:2026-08-15 用户反馈(对话室 2 条 + 第 3 轮 7 条,共 9 条)
+
+- [x] 5.1 清理测试残留(rollout-test 文件 + DB 行)
+- [x] 5.2 事件指纹去重(agent+会话+类型+全文)+ 存量清理 1415 条
+- [x] 5.3 注入上下文分离:isInjectedSystemText 过滤 + extractUserPrompt 提取真实输入 + 任务记录用 displayPrompt
+- [x] 5.4 会话档案服务端分页 + 总数 + 搜索下推
+- [x] 5.5 空会话默认隐藏 + 含空会话开关;修复 claude/dsh 汇总清零 bug + 重建索引
+- [x] 5.6 密钥零片段(schema hasValue/presets 占位符/只读摘要占位符)
+- [x] 5.7 用量按天补零 + 45 天以上标签抽稀
+- [x] 5.8 目录选择器(浏览…/＋新建)+ 会话记住特工与目录
+- [x] 5.9 移动端响应式(标签横滑/对话抽屉/窄列收窄)
+- [x] 5.10 全量验证:typecheck/build/接口/桌面+390px 窄屏截图
+- [x] 5.11 回标 9 条 + CHANGELOG + README + commit + push

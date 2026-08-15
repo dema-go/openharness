@@ -160,14 +160,46 @@ export function Launcher(props: {
               <label htmlFor="task-cwd" className="mb-2 block font-display text-[13px] text-ink">
                 工作目录
               </label>
-              <input
-                id="task-cwd"
-                list="project-dirs"
-                value={cwd}
-                onChange={(e) => setCwd(e.target.value)}
-                placeholder="/Users/liuziying/Projects/…"
-                className="comic-input"
-              />
+              <div className="flex items-center gap-2">
+                <input
+                  id="task-cwd"
+                  list="project-dirs"
+                  value={cwd}
+                  onChange={(e) => setCwd(e.target.value)}
+                  placeholder="/Users/liuziying/Projects/…"
+                  className="comic-input min-w-0 flex-1"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    void api
+                      .pickDir('open')
+                      .then((res) => {
+                        if (res.path) setCwd(res.path);
+                      })
+                      .catch(() => undefined);
+                  }}
+                  className="comic-btn shrink-0 bg-white px-2.5 py-2 font-mono text-[11px] text-ink"
+                  title="本机目录选择器"
+                >
+                  浏览…
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void api
+                      .pickDir('new')
+                      .then((res) => {
+                        if (res.path) setCwd(res.path);
+                      })
+                      .catch(() => undefined);
+                  }}
+                  className="comic-btn shrink-0 bg-white px-2.5 py-2 font-mono text-[11px] text-ink"
+                  title="新建文件夹作为工作区"
+                >
+                  ＋新建
+                </button>
+              </div>
               <datalist id="project-dirs">
                 {projectDirs.map((d) => (
                   <option key={d} value={d} />

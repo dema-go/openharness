@@ -46,10 +46,10 @@ export function App(): React.JSX.Element {
 
   const refreshSessions = useCallback(() => {
     void api
-      .sessions()
-      .then((s) => {
-        setSessions(s);
-        const dirs = [...new Set(s.map((x) => x.projectDir).filter(Boolean))] as string[];
+      .sessions({ limit: 100 })
+      .then((res) => {
+        setSessions(res.sessions);
+        const dirs = [...new Set(res.sessions.map((x) => x.projectDir).filter(Boolean))] as string[];
         setProjectDirs(dirs.slice(0, 12));
       })
       .catch(() => undefined);
@@ -171,7 +171,7 @@ export function App(): React.JSX.Element {
         </aside>
 
         <main className="flex min-w-0 flex-1 flex-col">
-          <div className="flex h-14 shrink-0 items-end gap-2 px-4 pt-3">
+          <div className="flex h-14 shrink-0 items-end gap-2 overflow-x-auto px-4 pt-3">
             {TABS.map((t, i) => {
               const active = tab === t.id;
               return (
@@ -179,7 +179,7 @@ export function App(): React.JSX.Element {
                   key={t.id}
                   type="button"
                   onClick={() => setTab(t.id)}
-                  className={`rounded-t-xl border-[3px] border-b-0 border-ink px-4 py-1.5 font-display text-[13.5px] transition-colors ${
+                  className={`shrink-0 whitespace-nowrap rounded-t-xl border-[3px] border-b-0 border-ink px-4 py-1.5 font-display text-[13.5px] transition-colors ${
                     active ? 'bg-white' : 'bg-panel2/60 hover:bg-panel2'
                   } ${i % 2 === 1 ? 'translate-y-[3px]' : ''}`}
                   style={active ? { boxShadow: '0 -3px 0 #fff' } : undefined}
@@ -207,7 +207,7 @@ export function App(): React.JSX.Element {
                 onTask={onTask}
               />
             ) : tab === 'sessions' ? (
-              <SessionsPanel sessions={sessions} onResume={resumeInConversation} />
+              <SessionsPanel onResume={resumeInConversation} />
             ) : tab === 'usage' ? (
               <UsagePanel />
             ) : (

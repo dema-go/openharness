@@ -63,6 +63,8 @@ export class DshAdapter implements AgentAdapter {
         const r = await parseSessionFile(f, { offset: start, onEvent: handlers.onEvent });
         this.offsets.set(f, r.offset);
         this.cursorStore?.set(f, r.offset);
+        // 已消费完的文件跳过汇总:否则空解析把库里汇总覆盖成 messageCount=0
+        if (start > 0 && r.messageCount === 0 && r.offset <= start) continue;
         handlers.onSummary(this.toSummary(r));
       } catch {
         // 跳过损坏文件
@@ -309,7 +311,9 @@ export class DshAdapter implements AgentAdapter {
       label,
       type: 'string',
       group: '默认模型',
-      value: opts?.secret && value ? maskSecret(value) : value,
+      // 密钥字段绝不回传任何值片段
+      value: opts?.secret ? '' : value,
+      ...(opts?.secret ? { hasValue: value !== '', secret: true } : {}),
       ...opts,
     });
     return [

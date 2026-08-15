@@ -3,6 +3,7 @@
  * REST:状态、会话、事件、任务、建议;WS:/ws 推送实时消息。
  */
 import { existsSync, statSync } from 'node:fs';
+import { execFile } from 'node:child_process';
 import { createNodeWebSocket, type NodeWebSocket } from '@hono/node-ws';
 import { Hono } from 'hono';
 import type { WSContext } from 'hono/ws';
@@ -37,8 +38,38 @@ export function createApp(deps: AppDeps): { app: Hono; nodeWs: NodeWebSocket } {
 
   app.get('/api/sessions', (c) => {
     const agent = c.req.query('agent');
+    const q = c.req.query('q')?.trim() || undefined;
+    const before = c.req.query('before');
+    const includeEmpty = c.req.query('includeEmpty') === '1';
     const limit = Number(c.req.query('limit') ?? 100);
-    return c.json(store.sessions({ agent, limit: Number.isFinite(limit) ? limit : 100 }));
+    const sessions = store.sessions({
+      agent,
+      q,
+      includeEmpty,
+      beforeTs: before ? Number(before) : undefined,
+      limit: Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 300) : 100,
+    });
+    return c.json({ sessions, total: store.sessionsCount({ agent, q, includeEmpty }) });
+  });
+
+  // 本机目录选择器(osascript choose folder):web 端无法取得绝对路径,由本机进程弹出原生选择框
+  app.post('/api/pick-dir', async (c) => {
+    const body = await c.req.json<{ mode?: 'open' | 'new' }>().catch(() => ({} as { mode?: 'open' | 'new' }));
+    const script =
+      body.mode === 'new'
+        ? 'POSIX path of (choose folder name with prompt "新建工作区文件夹")'
+        : 'POSIX path of (choose folder with prompt "选择工作区目录")';
+    try {
+      const pathOut = await new Promise<string>((resolve, reject) => {
+        execFile('osascript', ['-e', script], { timeout: 60_000 }, (err, stdout) => {
+          if (err) return reject(err);
+          resolve(String(stdout ?? '').trim());
+        });
+      });
+      return c.json({ path: pathOut });
+    } catch {
+      return c.json({ cancelled: true });
+    }
   });
 
   app.get('/api/events', (c) => {

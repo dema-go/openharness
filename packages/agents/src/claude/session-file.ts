@@ -8,7 +8,7 @@
 import { createReadStream, promises as fs } from 'node:fs';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
-import { truncate, type HarnessEvent } from '@openharness/core';
+import { extractUserPrompt, isInjectedSystemText, truncate, type HarnessEvent } from '@openharness/core';
 
 export interface SessionFile {
   filePath: string;
@@ -56,8 +56,9 @@ export function normalizeRecord(rec: Record<string, unknown>): HarnessEvent[] {
   switch (type) {
     case 'user': {
       const text = collectText((rec.message as { content?: unknown } | undefined)?.content);
-      if (!text) return [];
-      return [{ ...base, kind: 'user-message', summary: truncate(text) }];
+      if (!text || isInjectedSystemText(text)) return [];
+      const real = extractUserPrompt(text);
+      return [{ ...base, kind: 'user-message', summary: truncate(real), meta: { fullText: real } }];
     }
     case 'assistant': {
       const message = rec.message as {

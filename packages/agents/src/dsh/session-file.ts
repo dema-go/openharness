@@ -9,7 +9,7 @@
  */
 import { promises as fs } from 'node:fs';
 import { decompress } from 'fzstd';
-import { truncate, type HarnessEvent } from '@openharness/core';
+import { extractUserPrompt, isInjectedSystemText, truncate, type HarnessEvent } from '@openharness/core';
 
 export interface ParseResult {
   sessionId: string;
@@ -56,7 +56,9 @@ export function normalizeRecord(rec: Record<string, unknown>): HarnessEvent[] {
     case 'user/message': {
       const text = collectText(data.content);
       if (!text) return [];
-      return [{ ...base, kind: 'user-message', summary: truncate(text) }];
+      if (isInjectedSystemText(text)) return []; // system-reminder 等系统注入不算用户消息
+      const real = extractUserPrompt(text); // 去掉[对话背景]注入,只留真实输入
+      return [{ ...base, kind: 'user-message', summary: truncate(real), meta: { fullText: real } }];
     }
     case 'assistant/message': {
       const message = (data.message ?? {}) as Record<string, unknown>;

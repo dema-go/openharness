@@ -76,7 +76,7 @@ async function main(): Promise<void> {
         enabled: true,
         activeTasks: tasks.activeCount(agent),
         queuedTasks: tasks.queuedCount(agent),
-        sessionsCount: store.sessionsCount(agent),
+        sessionsCount: store.sessionsCount({ agent }),
         lastSeen: lastSeenRow,
       });
     }
@@ -128,6 +128,27 @@ async function main(): Promise<void> {
     store.setMeta('reindex-v1.2', String(Date.now()));
   }
 
+  // 一次性:清理历史重复事件(发射路径 + 文件监听路径重复入库)
+  if (!store.getMeta('dedupe-v1')) {
+    const removed = store.dedupeExistingEvents();
+    console.log(`[openharness] 迁移:清理历史重复事件 ${removed} 条`);
+    store.setMeta('dedupe-v1', String(Date.now()));
+  }
+
+  // 一次性:重建 dsh 索引——用户消息去掉[对话背景]注入、标题取真实输入
+  if (!store.getMeta('reindex-v1.3')) {
+    console.log('[openharness] 迁移:重建 dsh 会话索引…');
+    store.resetAgentIndex('dsh', '%/.dsh/sessions/%');
+    store.setMeta('reindex-v1.3', String(Date.now()));
+  }
+
+  // 一次性:重建 claude 索引——修复已消费文件重启后汇总清零的历史数据
+  if (!store.getMeta('reindex-v1.4')) {
+    console.log('[openharness] 迁移:重建 claude 会话索引…');
+    store.resetAgentIndex('claude', '%/.claude/projects/%');
+    store.setMeta('reindex-v1.4', String(Date.now()));
+  }
+
   // ---- 启动索引 + 实时监听 ----
   const stopWatches: Array<() => Promise<void>> = [];
   for (const adapter of adapters.values()) {
@@ -143,7 +164,7 @@ async function main(): Promise<void> {
       },
     });
     stopWatches.push(await adapter.watch(pipeline));
-    console.log(`[openharness] ${adapter.displayName} 索引完成(${store.sessionsCount(adapter.agentId)} 个会话)。`);
+    console.log(`[openharness] ${adapter.displayName} 索引完成(${store.sessionsCount({ agent: adapter.agentId })} 个会话)。`);
   }
 
   await refreshStatuses();
