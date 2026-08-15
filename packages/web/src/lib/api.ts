@@ -19,6 +19,12 @@ export interface UsageReport {
   byProject: Array<{ project: string; input: number; output: number }>;
 }
 
+export interface AgentConfigInfo {
+  agent: string;
+  sections: Array<{ title: string; items: Array<{ key: string; value: string; masked?: boolean }> }>;
+  notes?: string[];
+}
+
 export const api = {
   agents: () => j<AgentStatus[]>('/agents'),
   sessions: (agent?: string) => j<SessionSummary[]>(`/sessions${agent ? `?agent=${agent}` : ''}`),
@@ -44,6 +50,7 @@ export const api = {
       `/suggest?prompt=${encodeURIComponent(prompt)}`,
     ),
   usage: () => j<UsageReport>('/usage'),
+  config: () => j<AgentConfigInfo[]>('/config'),
   openInTerminal: (agent: string, sessionId: string) =>
     j<{ ok: boolean; command: string }>('/deeplink', {
       method: 'POST',

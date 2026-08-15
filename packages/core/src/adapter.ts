@@ -1,4 +1,5 @@
 import type {
+  AgentConfigInfo,
   AgentId,
   AgentStatus,
   HarnessEvent,
@@ -50,6 +51,9 @@ export interface AgentAdapter {
 
   /** 生成在原生工具中恢复会话的命令(深链)。 */
   resumeCommand(sessionId: string): string;
+
+  /** 只读配置摘要(结构化 + 密钥脱敏,绝不返回配置原文)。 */
+  describeConfig(): Promise<AgentConfigInfo>;
 
   /** 汇总为 AgentStatus(由 server 填充 activeTasks / queuedTasks / sessionsCount)。 */
   describeStatus(extra: Pick<AgentStatus, 'activeTasks' | 'queuedTasks' | 'sessionsCount'>): AgentStatus;

@@ -6,11 +6,14 @@
  * - probe 排除常驻的 `dsh web`(本控制台就运行在其中)
  */
 import { spawn, execFile } from 'node:child_process';
+import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import chokidar, { type FSWatcher } from 'chokidar';
 import {
   type AgentAdapter,
+  type AgentConfigEntry,
+  type AgentConfigInfo,
   type AgentStatus,
   type CursorStore,
   type HarnessEvent,
@@ -20,6 +23,7 @@ import {
   type TaskHandle,
   truncate,
 } from '@openharness/core';
+import { entry } from '../config-utils.js';
 import { listSessionFiles, parseSessionFile, type ParseResult } from './session-file.js';
 
 export const DSH_SESSIONS_ROOT = path.join(os.homedir(), '.dsh', 'sessions');
@@ -174,6 +178,60 @@ export class DshAdapter implements AgentAdapter {
 
   resumeCommand(sessionId: string): string {
     return `dsh --profile tui --resume ${sessionId}`;
+  }
+
+  async describeConfig(): Promise<AgentConfigInfo> {
+    const sections: AgentConfigInfo['sections'] = [];
+    const notes: string[] = [];
+    try {
+      const yaml = await fs.readFile(path.join(os.homedir(), '.dsh', 'settings.yaml'), 'utf8');
+      const get = (section: string, key: string): string | null => {
+        const inSection = yaml.split('\n').some((l) => l.trim() === `${section}:`);
+        if (!inSection) return null;
+        const lines = yaml.split('\n');
+        const start = lines.findIndex((l) => l.trim() === `${section}:`);
+        for (let i = start + 1; i < lines.length; i++) {
+          const line = lines[i]!;
+          if (line && !line.startsWith(' ') && !line.startsWith('\t')) break;
+          const m = line.match(new RegExp(`^\\s+${key}:\\s*(.+)$`));
+          if (m) return m[1]!.trim().replace(/^"|"$/g, '');
+        }
+        return null;
+      };
+      const preset = get('permission', 'defaultPreset');
+      if (preset) sections.push({ title: '权限', items: [{ key: 'defaultPreset', value: preset }] });
+      const modelItems = [
+        ...(get('agent-default-model', 'provider') ? [entry('provider', get('agent-default-model', 'provider')!)] : []),
+        ...(get('agent-default-model', 'model') ? [entry('model', get('agent-default-model', 'model')!)] : []),
+        ...(get('agent-default-model', 'reasoningEffort') ? [entry('reasoningEffort', get('agent-default-model', 'reasoningEffort')!)] : []),
+      ];
+      if (modelItems.length) sections.push({ title: '默认模型', items: modelItems });
+      const providerNames = [...yaml.matchAll(/^\s{4}([A-Za-z0-9-]+):\s*$/gm)].map((m) => m[1]!);
+      if (providerNames.length) {
+        sections.push({ title: 'LLM Provider', items: providerNames.map((p) => ({ key: p, value: '已注册' })) });
+      }
+      notes.push('配置位于 ~/.dsh/settings.yaml;凭据保存在 ~/.dsh/.credentials.yaml(未展示)');
+    } catch {
+      notes.push('未找到 ~/.dsh/settings.yaml');
+    }
+    try {
+      const profiles = await fs.readdir(path.join(os.homedir(), '.dsh', 'profiles'));
+      const items: AgentConfigEntry[] = [];
+      for (const p of profiles.filter((x) => x !== 'node_modules')) {
+        try {
+          const pkg = JSON.parse(
+            await fs.readFile(path.join(os.homedir(), '.dsh', 'profiles', p, 'package.json'), 'utf8'),
+          ) as { dsh?: { profile?: { bundles?: string[] } } };
+          items.push({ key: p, value: (pkg.dsh?.profile?.bundles ?? []).join('、') || '(无 bundle)' });
+        } catch {
+          /* 非 package 目录 */
+        }
+      }
+      if (items.length) sections.push({ title: 'Profiles', items });
+    } catch {
+      /* 忽略 */
+    }
+    return { agent: this.agentId, sections, notes };
   }
 
   describeStatus(extra: Pick<AgentStatus, 'activeTasks' | 'queuedTasks' | 'sessionsCount'>): AgentStatus {

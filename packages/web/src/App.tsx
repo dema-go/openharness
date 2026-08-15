@@ -3,6 +3,7 @@ import type { AgentId, AgentStatus, HarnessEvent, SessionSummary, TaskInfo } fro
 import { AGENT_DISPLAY } from '@openharness/core';
 import { ActivityFeed } from './components/ActivityFeed';
 import { AgentCard } from './components/AgentCard';
+import { ConfigPanel } from './components/ConfigPanel';
 import { Launcher } from './components/Launcher';
 import { SessionsPanel } from './components/SessionsPanel';
 import { TopBar } from './components/TopBar';
@@ -22,7 +23,7 @@ export function App(): React.JSX.Element {
   const [filter, setFilter] = useState<AgentId | 'all'>('all');
   const [paused, setPaused] = useState(false);
   const [launcherOpen, setLauncherOpen] = useState(false);
-  const [tab, setTab] = useState<'feed' | 'sessions' | 'usage'>('feed');
+  const [tab, setTab] = useState<'feed' | 'sessions' | 'usage' | 'config'>('feed');
   const [clock, setClock] = useState('');
   const pulses = useRef<Record<string, number>>({});
 
@@ -157,6 +158,15 @@ export function App(): React.JSX.Element {
             >
               用量
             </button>
+            <button
+              type="button"
+              onClick={() => setTab('config')}
+              className={`rounded-sm px-2.5 py-1 font-display text-[13px] transition-colors ${
+                tab === 'config' ? 'bg-panel2 text-paper' : 'text-faint hover:text-dim'
+              }`}
+            >
+              配置
+            </button>
           </div>
           {tab === 'feed' ? (
             <ActivityFeed
@@ -168,8 +178,10 @@ export function App(): React.JSX.Element {
             />
           ) : tab === 'sessions' ? (
             <SessionsPanel sessions={sessions} />
-          ) : (
+          ) : tab === 'usage' ? (
             <UsagePanel />
+          ) : (
+            <ConfigPanel />
           )}
         </main>
       </div>

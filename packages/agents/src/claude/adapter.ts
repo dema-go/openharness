@@ -5,12 +5,14 @@
  * - 打断 = 进程组 SIGINT;深链 = `claude --resume <sessionId>`
  */
 import { spawn, execFile } from 'node:child_process';
+import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
 import chokidar, { type FSWatcher } from 'chokidar';
 import {
   type AgentAdapter,
+  type AgentConfigInfo,
   type AgentStatus,
   type CursorStore,
   type HarnessEvent,
@@ -20,6 +22,7 @@ import {
   type TaskHandle,
   truncate,
 } from '@openharness/core';
+import { flattenSection } from '../config-utils.js';
 import { listSessionFiles, normalizeRecord, parseSessionFile, type ParseResult } from './session-file.js';
 
 export const CLAUDE_SESSIONS_ROOT = path.join(os.homedir(), '.claude', 'projects');
@@ -187,6 +190,42 @@ export class ClaudeAdapter implements AgentAdapter {
 
   resumeCommand(sessionId: string): string {
     return `claude --resume ${sessionId}`;
+  }
+
+  async describeConfig(): Promise<AgentConfigInfo> {
+    const sections: AgentConfigInfo['sections'] = [];
+    const notes: string[] = [];
+    try {
+      const settings = JSON.parse(
+        await fs.readFile(path.join(os.homedir(), '.claude', 'settings.json'), 'utf8'),
+      ) as Record<string, unknown>;
+      const env = (settings.env ?? {}) as Record<string, unknown>;
+      const plugins = (settings.enabledPlugins ?? {}) as Record<string, unknown>;
+      const rest = Object.fromEntries(
+        Object.entries(settings).filter(([k]) => k !== 'env' && k !== 'enabledPlugins'),
+      );
+      if (Object.keys(rest).length) sections.push({ title: '偏好设置', items: flattenSection(rest) });
+      if (Object.keys(plugins).length) {
+        sections.push({
+          title: '插件',
+          items: Object.entries(plugins).map(([k, v]) => ({ key: k, value: v === true ? '启用' : '禁用' })),
+        });
+      }
+      if (Object.keys(env).length) sections.push({ title: '环境变量(env)', items: flattenSection(env) });
+      notes.push('配置位于 ~/.claude/settings.json(结构化展示,密钥已脱敏)');
+    } catch {
+      notes.push('未找到 ~/.claude/settings.json');
+    }
+    try {
+      const j = JSON.parse(
+        await fs.readFile(path.join(os.homedir(), '.claude.json'), 'utf8'),
+      ) as { mcpServers?: Record<string, unknown> };
+      const mcp = Object.keys(j.mcpServers ?? {});
+      notes.push(mcp.length ? `MCP 服务器:${mcp.length} 个(${mcp.slice(0, 8).join('、')})` : '未配置 MCP 服务器');
+    } catch {
+      /* 忽略 */
+    }
+    return { agent: this.agentId, sections, notes };
   }
 
   describeStatus(extra: Pick<AgentStatus, 'activeTasks' | 'queuedTasks' | 'sessionsCount'>): AgentStatus {

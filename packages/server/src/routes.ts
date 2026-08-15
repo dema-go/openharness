@@ -85,6 +85,22 @@ export function createApp(deps: AppDeps): { app: Hono; nodeWs: NodeWebSocket } {
 
   app.get('/api/usage', (c) => c.json(store.usage()));
 
+  // 配置只读摘要(结构化 + 密钥脱敏)
+  app.get('/api/config', async (c) => {
+    const agent = c.req.query('agent');
+    const list = agent ? [getAdapter(agent as TaskInfo['agent'])] : [...enabledAgents].map((a) => getAdapter(a));
+    const out = [];
+    for (const adapter of list) {
+      if (!adapter) continue;
+      try {
+        out.push(await adapter.describeConfig());
+      } catch (err) {
+        out.push({ agent: adapter.agentId, sections: [], notes: [`读取配置失败:${err instanceof Error ? err.message : String(err)}`] });
+      }
+    }
+    return c.json(out);
+  });
+
   // 深链:在新 Terminal 窗口中执行原生工具的恢复命令(仅本机,用户触发)
   app.post('/api/deeplink', async (c) => {
     const body = await c.req.json<{ agent?: string; sessionId?: string }>();

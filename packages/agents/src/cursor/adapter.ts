@@ -14,6 +14,8 @@ import { DatabaseSync } from 'node:sqlite';
 import chokidar, { type FSWatcher } from 'chokidar';
 import {
   type AgentAdapter,
+  type AgentConfigEntry,
+  type AgentConfigInfo,
   type AgentStatus,
   type CursorStore,
   type HarnessEvent,
@@ -255,6 +257,26 @@ export class CursorAdapter implements AgentAdapter {
 
   resumeCommand(sessionId: string): string {
     return `cursor agent --resume ${sessionId}`;
+  }
+
+  async describeConfig(): Promise<AgentConfigInfo> {
+    const sections: AgentConfigInfo['sections'] = [];
+    const notes: string[] = [];
+    const run = (bin: string, args: string[]): Promise<string> =>
+      new Promise((resolve) => {
+        execFile(bin, args, { timeout: 8000 }, (err, stdout) => resolve(err ? '' : (stdout ?? '').trim()));
+      });
+
+    const cliVersion = await run('cursor-agent', ['--version']);
+    const ideVersion = await run('defaults', ['read', '/Applications/Cursor.app/Contents/Info.plist', 'CFBundleShortVersionString']);
+    const items: AgentConfigEntry[] = [];
+    if (cliVersion) items.push({ key: 'cursor-agent CLI', value: cliVersion });
+    if (ideVersion) items.push({ key: 'Cursor IDE', value: ideVersion });
+    if (items.length) sections.push({ title: '版本', items });
+
+    notes.push('CLI 登录态与 IDE 不共享:控制台发任务前需执行一次 `cursor-agent login`');
+    notes.push('会话索引来自 ~/Library/Application Support/Cursor/User/globalStorage/conversation-search.db(只读)');
+    return { agent: this.agentId, sections, notes };
   }
 
   describeStatus(extra: Pick<AgentStatus, 'activeTasks' | 'queuedTasks' | 'sessionsCount'>): AgentStatus {

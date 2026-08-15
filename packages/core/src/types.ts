@@ -105,6 +105,25 @@ export interface LaunchOptions {
   taskId: string;
 }
 
+/** 配置只读展示:结构化条目 + 脱敏,绝不展示配置原文 */
+export interface AgentConfigEntry {
+  key: string;
+  value: string;
+  /** 敏感值(密钥/token)已脱敏 */
+  masked?: boolean;
+}
+
+export interface AgentConfigSection {
+  title: string;
+  items: AgentConfigEntry[];
+}
+
+export interface AgentConfigInfo {
+  agent: AgentId;
+  sections: AgentConfigSection[];
+  notes?: string[];
+}
+
 export interface TaskHandle {
   id: string;
   pid?: number;

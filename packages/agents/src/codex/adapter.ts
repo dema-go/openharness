@@ -6,12 +6,14 @@
  * - probe 排除 ChatGPT 桌面 App 的常驻 codex 进程,只认 CLI 任务进程
  */
 import { spawn, execFile } from 'node:child_process';
+import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
 import chokidar, { type FSWatcher } from 'chokidar';
 import {
   type AgentAdapter,
+  type AgentConfigInfo,
   type AgentStatus,
   type CursorStore,
   type HarnessEvent,
@@ -21,6 +23,7 @@ import {
   type TaskHandle,
   truncate,
 } from '@openharness/core';
+import { entry, parseTomlSections } from '../config-utils.js';
 import { listSessionFiles, normalizeRecord, parseSessionFile, type ParseResult } from './session-file.js';
 
 export const CODEX_SESSIONS_ROOT = path.join(os.homedir(), '.codex', 'sessions');
@@ -192,6 +195,64 @@ export class CodexAdapter implements AgentAdapter {
 
   resumeCommand(sessionId: string): string {
     return `codex resume ${sessionId}`;
+  }
+
+  async describeConfig(): Promise<AgentConfigInfo> {
+    const sections: AgentConfigInfo['sections'] = [];
+    const notes: string[] = [];
+    try {
+      const content = await fs.readFile(path.join(os.homedir(), '.codex', 'config.toml'), 'utf8');
+      const toml = parseTomlSections(content);
+
+      const root = toml.get('') ?? new Map();
+      const rootItems = [
+        ...(root.has('model') ? [entry('model', root.get('model')!)] : []),
+        ...(root.has('model_reasoning_effort') ? [entry('model_reasoning_effort', root.get('model_reasoning_effort')!)] : []),
+        ...(root.has('sandbox_mode') ? [entry('sandbox_mode', root.get('sandbox_mode')!)] : []),
+        ...(root.has('approval_policy') ? [entry('approval_policy', root.get('approval_policy')!)] : []),
+      ];
+      if (rootItems.length) sections.push({ title: '模型与沙箱', items: rootItems });
+
+      const features = toml.get('features');
+      if (features?.size) sections.push({ title: '特性开关', items: [...features].map(([k, v]) => entry(k, v)) });
+
+      const plugins = [...toml.entries()]
+        .filter(([name]) => name.startsWith('plugins.'))
+        .filter(([, kv]) => kv.get('enabled') === 'true')
+        .map(([name]) => name.replace(/^plugins\./, '').replace(/^"|"$/g, ''));
+      if (plugins.length) {
+        sections.push({ title: '插件(启用)', items: plugins.map((p) => ({ key: p, value: '启用' })) });
+      }
+
+      const mcp = [...toml.entries()].filter(
+        ([name]) => name.startsWith('mcp_servers.') && !name.endsWith('.env'),
+      );
+      if (mcp.length) {
+        sections.push({
+          title: 'MCP 服务器',
+          items: mcp.map(([name, kv]) => ({
+            key: name.replace(/^mcp_servers\./, ''),
+            value: `${kv.get('command') ?? '?'}${kv.get('enabled') === 'false' ? '(禁用)' : ''}`,
+          })),
+        });
+      }
+
+      const projects = [...toml.entries()].filter(([name]) => name.startsWith('projects.'));
+      if (projects.length) {
+        sections.push({ title: '项目信任', items: [{ key: '已信任项目', value: `${projects.length} 个` }] });
+      }
+
+      const shellEnv = toml.get('shell_environment_policy.set');
+      if (shellEnv?.size) sections.push({ title: 'Shell 环境注入', items: [...shellEnv].map(([k, v]) => entry(k, v)) });
+
+      const memories = toml.get('memories');
+      if (memories?.size) sections.push({ title: '记忆', items: [...memories].map(([k, v]) => entry(k, v)) });
+
+      notes.push('配置位于 ~/.codex/config.toml(结构化展示,密钥已脱敏)');
+    } catch {
+      notes.push('未找到 ~/.codex/config.toml');
+    }
+    return { agent: this.agentId, sections, notes };
   }
 
   describeStatus(extra: Pick<AgentStatus, 'activeTasks' | 'queuedTasks' | 'sessionsCount'>): AgentStatus {
