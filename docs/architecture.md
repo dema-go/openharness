@@ -72,7 +72,7 @@ type HarnessEvent = {
 | 工具 | 源 | 格式 |
 |---|---|---|
 | Claude | `~/.claude/projects/<enc-path>/<sessionId>.jsonl` | 带 type 的 JSONL(`user/assistant/system/mode/ai-title/file-history-*`…),assistant 记录含 `message.usage` |
-| Codex | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` | 事件 JSONL(含 usage 汇总) |
+| Codex | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` | 事件 JSONL(session_meta / response_item / event_msg / turn_context…;实测 rollout 不含 usage,用量以流式事件为准,缺省记 0) |
 | DSH | `~/.dsh/sessions/<enc-path>/session-<id>/session.jsonl.zstd` | zstd 压缩 JSONL |
 | Cursor | 运行态经 `cursor agent --output-format stream-json`;历史会话后续解析 IDE workspaceStorage(SQLite),v0.1 降级为"进程状态 + 我们发射的会话" |
 
