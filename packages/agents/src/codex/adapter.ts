@@ -129,6 +129,7 @@ export class CodexAdapter implements AgentAdapter {
     child.on('close', (code) => settle(code, code === 0 ? 'done' : 'error'));
 
     const rl = createInterface({ input: child.stdout! });
+    let turnModel: string | null = null;
     rl.on('line', (line) => {
       let rec: Record<string, unknown>;
       try {
@@ -140,9 +141,16 @@ export class CodexAdapter implements AgentAdapter {
       if (rec.type === 'session_meta' && payload.session_id) {
         sessionId = payload.session_id as string;
       }
+      if (rec.type === 'turn_context' && typeof payload.model === 'string') {
+        turnModel = payload.model as string;
+      }
       for (const e of normalizeRecord(rec)) {
         if (e.kind === 'user-message') continue; // 工具结果回显太噪,略过
-        onEvent({ ...e, sessionId: sessionId ?? e.sessionId, meta: { ...e.meta, taskId: id } });
+        onEvent({
+          ...e,
+          sessionId: sessionId ?? e.sessionId,
+          meta: { ...e.meta, taskId: id, ...(turnModel ? { model: turnModel } : {}) },
+        });
       }
     });
     child.stderr?.on('data', (chunk: Buffer) => {

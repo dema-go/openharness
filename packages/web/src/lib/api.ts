@@ -15,6 +15,7 @@ export interface UsageReport {
   total: { input: number; output: number };
   toolCalls: number;
   byAgent: Array<{ agent: string; input: number; output: number }>;
+  byModel: Array<{ model: string; agent: string; input: number; output: number }>;
   byDay: Array<{ day: string; input: number; output: number }>;
   byProject: Array<{ project: string; input: number; output: number }>;
 }

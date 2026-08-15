@@ -63,6 +63,7 @@ export function normalizeRecord(rec: Record<string, unknown>): HarnessEvent[] {
       const message = rec.message as {
         content?: Array<Record<string, unknown>>;
         usage?: Record<string, unknown>;
+        model?: unknown;
       } | undefined;
       const usage = message?.usage;
       const usageNorm = usage
@@ -86,7 +87,15 @@ export function normalizeRecord(rec: Record<string, unknown>): HarnessEvent[] {
         events.push({ ...base, kind: 'assistant-message', summary: '（思考中…）' });
       }
       // usage 是消息级指标,只附在首个事件上,避免求和重复计数
-      if (usageNorm && events.length > 0) events[0] = { ...events[0]!, usage: usageNorm };
+      // model 是消息级信息,挂在首个事件 meta 上供用量归属
+      if (events.length > 0) {
+        const first = events[0]!;
+        events[0] = {
+          ...first,
+          ...(usageNorm ? { usage: usageNorm } : {}),
+          ...(typeof message?.model === 'string' ? { meta: { ...first.meta, model: message.model } } : {}),
+        };
+      }
       return events;
     }
     case 'mode':

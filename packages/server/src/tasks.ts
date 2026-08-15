@@ -6,8 +6,9 @@
  */
 import { randomUUID } from 'node:crypto';
 import type { AgentAdapter, HarnessEvent, LaunchOptions, TaskHandle, TaskInfo } from '@openharness/core';
-import { truncate } from '@openharness/core';
+import { AGENT_DISPLAY, truncate } from '@openharness/core';
 import { broadcast } from './bus.js';
+import { desktopNotify } from './notify.js';
 import type { Store } from './store.js';
 
 interface ManagedTask {
@@ -22,10 +23,12 @@ const MAX_KEPT = 50;
 export class TaskManager {
   private readonly tasks = new Map<string, ManagedTask>();
   private readonly queues = new Map<TaskInfo['agent'], string[]>();
+  private readonly notified = new Set<string>();
 
   constructor(
     private readonly pipeline: (e: HarnessEvent) => void,
     private readonly store?: Store,
+    private readonly notify: boolean = true,
   ) {}
 
   /** 服务启动时恢复历史任务;遗留的 running/queued 归位(中断/清除) */
@@ -191,6 +194,17 @@ export class TaskManager {
   private broadcastTask(info: TaskInfo): void {
     this.store?.upsertTask(info);
     broadcast({ type: 'task', data: { ...info } });
+    // 桌面通知:任务收尾且尚未通知过
+    if (
+      this.notify &&
+      !this.notified.has(info.id) &&
+      info.endedAt &&
+      (info.state === 'done' || info.state === 'error' || info.state === 'stopped')
+    ) {
+      this.notified.add(info.id);
+      const label = info.state === 'done' ? '任务完成' : info.state === 'stopped' ? '任务已打断' : '任务失败';
+      desktopNotify(`${label} · ${AGENT_DISPLAY[info.agent]}`, info.prompt);
+    }
   }
 
   private evict(): void {

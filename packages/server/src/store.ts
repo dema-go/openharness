@@ -38,6 +38,7 @@ export class Store implements CursorStore {
         project_dir TEXT,
         input_tokens INTEGER,
         output_tokens INTEGER,
+        model TEXT,
         meta_json TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_events_seq ON events(seq);
@@ -58,6 +59,11 @@ export class Store implements CursorStore {
         exit_code INTEGER
       );
     `);
+    // 迁移:旧库 events 表补 model 列(按模型用量聚合)
+    const cols = this.db.prepare('PRAGMA table_info(events)').all() as Array<{ name: string }>;
+    if (!cols.some((c) => c.name === 'model')) {
+      this.db.exec('ALTER TABLE events ADD COLUMN model TEXT');
+    }
   }
 
   // ---- CursorStore ----
@@ -118,16 +124,17 @@ export class Store implements CursorStore {
   }
 
   // ---- events ----
-  insertEvent(e: HarnessEvent): number {
+  insertEvent(e: HarnessEvent & { model?: string }): number {
     const info = this.db
       .prepare(
-        `INSERT INTO events (ts, agent, session_id, kind, summary, project_dir, input_tokens, output_tokens, meta_json)
-         VALUES (@ts, @agent, @sessionId, @kind, @summary, @projectDir, @inputTokens, @outputTokens, @metaJson)`,
+        `INSERT INTO events (ts, agent, session_id, kind, summary, project_dir, input_tokens, output_tokens, model, meta_json)
+         VALUES (@ts, @agent, @sessionId, @kind, @summary, @projectDir, @inputTokens, @outputTokens, @model, @metaJson)`,
       )
       .run({
         ...e,
         inputTokens: e.usage?.input ?? null,
         outputTokens: e.usage?.output ?? null,
+        model: e.model ?? null,
         metaJson: e.meta ? JSON.stringify(e.meta) : null,
       });
     return Number(info.lastInsertRowid);
@@ -183,6 +190,17 @@ export class Store implements CursorStore {
         )
         .all() as Array<{ agent: string; i: number; o: number }>
     ).map((r) => ({ agent: r.agent as UsageReport['byAgent'][number]['agent'], input: r.i, output: r.o }));
+    const byModel = (
+      this.db
+        .prepare(
+          `SELECT COALESCE(model, '(未知)') AS m, agent,
+                  COALESCE(SUM(input_tokens),0) AS i, COALESCE(SUM(output_tokens),0) AS o
+           FROM events GROUP BY m, agent
+           HAVING COALESCE(SUM(input_tokens),0) + COALESCE(SUM(output_tokens),0) > 0
+           ORDER BY i + o DESC`,
+        )
+        .all() as Array<{ m: string; agent: string; i: number; o: number }>
+    ).map((r) => ({ model: r.m, agent: r.agent as UsageReport['byModel'][number]['agent'], input: r.i, output: r.o }));
     const since14d = Date.now() - 14 * 86400_000;
     const byDay = (
       this.db
@@ -203,7 +221,7 @@ export class Store implements CursorStore {
         .all() as Array<{ p: string; i: number; o: number }>
     ).map((r) => ({ project: r.p, input: r.i, output: r.o }));
 
-    return { total: { input: total.i, output: total.o }, toolCalls: toolCalls.n, byAgent, byDay, byProject };
+    return { total: { input: total.i, output: total.o }, toolCalls: toolCalls.n, byAgent, byModel, byDay, byProject };
   }
 
   // ---- tasks 持久化 ----
@@ -269,6 +287,7 @@ export interface UsageReport {
   total: { input: number; output: number };
   toolCalls: number;
   byAgent: Array<{ agent: string; input: number; output: number }>;
+  byModel: Array<{ model: string; agent: string; input: number; output: number }>;
   byDay: Array<{ day: string; input: number; output: number }>;
   byProject: Array<{ project: string; input: number; output: number }>;
 }

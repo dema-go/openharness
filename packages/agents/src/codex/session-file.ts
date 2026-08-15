@@ -116,6 +116,7 @@ export async function parseSessionFile(
   let sessionId = fileId;
   let projectDir: string | null = null;
   let title: string | null = null;
+  let turnModel: string | null = null;
   let firstTs = 0;
   let lastTs = 0;
   let messageCount = 0;
@@ -137,11 +138,16 @@ export async function parseSessionFile(
     const payload = (rec.payload ?? {}) as Record<string, unknown>;
     if (payload.session_id) sessionId = payload.session_id as string;
     if (payload.cwd) projectDir = payload.cwd as string;
+    // 模型名在 turn_context 里,挂到后续 session-start 事件的 meta 上
+    if (rec.type === 'turn_context' && typeof payload.model === 'string') {
+      turnModel = payload.model as string;
+    }
     if (!title && typeof payload.summary === 'string' && payload.summary.trim()) {
       title = payload.summary.trim();
     }
 
     for (const e of normalizeRecord(rec)) {
+      if (e.kind === 'session-start' && turnModel) e.meta = { ...e.meta, model: turnModel };
       if (firstTs === 0 || e.ts < firstTs) firstTs = e.ts;
       if (e.ts > lastTs) lastTs = e.ts;
       if (e.kind === 'user-message' || e.kind === 'assistant-message') messageCount++;

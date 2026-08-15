@@ -88,6 +88,9 @@ function normalizeStreamRecord(rec: Record<string, unknown>): HarnessEvent[] {
         events.push({ ...base, kind: 'tool-call', summary: `调用工具 ${String(c.name ?? '?')}`, meta: { tool: c.name } });
       }
     }
+    if (events.length > 0 && typeof message.model === 'string') {
+      events[0] = { ...events[0]!, meta: { ...events[0]!.meta, model: message.model } };
+    }
     return events;
   }
   if (type === 'user') {

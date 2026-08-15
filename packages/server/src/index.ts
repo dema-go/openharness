@@ -4,7 +4,7 @@
  */
 import os from 'node:os';
 import path from 'node:path';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import type { AgentAdapter, AgentId, AgentStatus, HarnessEvent } from '@openharness/core';
@@ -23,9 +23,16 @@ async function main(): Promise<void> {
   const store = new Store(DB_PATH);
 
   // 事件流水线:所有归一化事件 → 入库 → 广播
+  // 同时维护 session → model 映射,用量统计按模型归属
+  const modelBySession = new Map<string, string>();
   const pipeline = (e: HarnessEvent): void => {
+    const key = `${e.agent}:${e.sessionId}`;
+    if (typeof e.meta?.model === 'string') {
+      modelBySession.set(key, e.meta.model as string);
+    }
+    const model = modelBySession.get(key);
     try {
-      store.insertEvent(e);
+      store.insertEvent(model ? { ...e, model } : e);
     } catch (err) {
       console.error('[pipeline] 入库失败:', err);
     }
@@ -83,7 +90,19 @@ async function main(): Promise<void> {
     return events[0]?.ts;
   }
 
-  const tasks = new TaskManager(pipeline, store);
+  // 本地设置(桌面通知开关等)
+  let notifyEnabled = true;
+  try {
+    const settingsPath = path.join(os.homedir(), '.openharness', 'settings.json');
+    if (existsSync(settingsPath)) {
+      const s = JSON.parse(readFileSync(settingsPath, 'utf8')) as { notifications?: boolean };
+      notifyEnabled = s.notifications ?? true;
+    }
+  } catch {
+    /* 缺省开启 */
+  }
+
+  const tasks = new TaskManager(pipeline, store, notifyEnabled);
   await tasks.recover();
 
   // ---- 启动索引 + 实时监听 ----

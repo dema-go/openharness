@@ -31,7 +31,7 @@ export function UsagePanel(): React.JSX.Element {
     );
   }
 
-  const { total, toolCalls, byAgent, byDay, byProject } = report;
+  const { total, toolCalls, byAgent, byModel, byDay, byProject } = report;
   const agentMax = Math.max(1, ...byAgent.map((a) => a.input + a.output));
   const dayMax = Math.max(1, ...byDay.map((d) => d.input + d.output));
   const projectMax = Math.max(1, ...byProject.map((p) => p.input + p.output));
@@ -125,8 +125,34 @@ export function UsagePanel(): React.JSX.Element {
             </li>
           ))}
         </ul>
+      </section>
+
+      {/* 按模型 */}
+      <section className="mt-5 rounded-sm border border-line bg-panel p-4">
+        <h3 className="font-display text-[13px] font-500 text-paper">按模型</h3>
+        <ul className="mt-3 space-y-2.5">
+          {byModel.length === 0 && <p className="text-[12px] text-faint">暂无数据</p>}
+          {byModel.map((m) => (
+            <li key={`${m.agent}-${m.model}`} className="flex items-center gap-3">
+              <span className="w-52 shrink-0 truncate font-mono text-[11px] text-dim" title={m.model}>
+                {m.model}
+              </span>
+              <span className="w-20 shrink-0 font-mono text-[10px] text-faint">
+                {AGENT_DISPLAY[m.agent as keyof typeof AGENT_DISPLAY] ?? m.agent}
+              </span>
+              <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-[1px] bg-line">
+                <div className="bg-amber" style={{ width: `${(m.input / agentMax) * 100}%` }} />
+              </div>
+              <span className="shrink-0 font-mono text-[11px] text-faint tabular-nums">
+                <span className="text-amber">{fmtTokens(m.input)}</span>
+                {' / '}
+                <span className="text-jade">{fmtTokens(m.output)}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
         <p className="mt-3 border-t border-line pt-2 text-[11px] leading-relaxed text-faint">
-          token 数据来自各工具会话记录;Cursor 历史不含用量(显示为 0),Codex 依赖流式事件中的 usage 字段,部分会话可能缺省。
+          token 数据来自各工具会话记录;Cursor 历史不含用量(显示为 0),Codex 依赖流式事件中的 usage 字段,部分会话可能缺省。DSH 会话不记录模型名(显示"未知"),其模型以配置页 profile 为准。
         </p>
       </section>
     </div>
