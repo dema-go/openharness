@@ -1,14 +1,13 @@
 /**
- * CodexAdapter:OpenAI Codex CLI 的 OpenHarness 接入层。
- * - 索引/监听 ~/.codex/sessions 下 rollout JSONL(游标增量续读)
- * - 经 `codex exec --json` 发射任务并流式归一化
- * - 打断 = 进程组 SIGINT;深链 = `codex resume <sessionId>`
- * - probe 排除 ChatGPT 桌面 App 的常驻 codex 进程,只认 CLI 任务进程
+ * DSHAdapter:DeepSeek Harness 的 OpenHarness 接入层。
+ * - 索引/监听 ~/.dsh/sessions 下 zstd 会话文件(整文件解压 + 行号游标)
+ * - 经 `dsh --profile headless <task>` 发射单任务;结束文本回填为助手消息
+ * - 打断 = 进程组 SIGINT;深链 = `dsh --profile tui --resume <sessionId>`
+ * - probe 排除常驻的 `dsh web`(本控制台就运行在其中)
  */
 import { spawn, execFile } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
-import { createInterface } from 'node:readline';
 import chokidar, { type FSWatcher } from 'chokidar';
 import {
   type AgentAdapter,
@@ -21,13 +20,13 @@ import {
   type TaskHandle,
   truncate,
 } from '@openharness/core';
-import { listSessionFiles, normalizeRecord, parseSessionFile, type ParseResult } from './session-file.js';
+import { listSessionFiles, parseSessionFile, type ParseResult } from './session-file.js';
 
-export const CODEX_SESSIONS_ROOT = path.join(os.homedir(), '.codex', 'sessions');
+export const DSH_SESSIONS_ROOT = path.join(os.homedir(), '.dsh', 'sessions');
 
-export class CodexAdapter implements AgentAdapter {
-  readonly agentId = 'codex' as const;
-  readonly displayName = 'Codex';
+export class DshAdapter implements AgentAdapter {
+  readonly agentId = 'dsh' as const;
+  readonly displayName = 'DeepSeek Harness';
   readonly enabled = true;
 
   private readonly offsets = new Map<string, number>();
@@ -35,7 +34,7 @@ export class CodexAdapter implements AgentAdapter {
   constructor(private readonly cursorStore?: CursorStore) {}
 
   async listSessions(): Promise<SessionSummary[]> {
-    const files = await listSessionFiles(CODEX_SESSIONS_ROOT);
+    const files = await listSessionFiles(DSH_SESSIONS_ROOT);
     const out: SessionSummary[] = [];
     for (const f of files) {
       try {
@@ -48,7 +47,7 @@ export class CodexAdapter implements AgentAdapter {
   }
 
   async indexEvents(handlers: IndexHandlers): Promise<void> {
-    const files = await listSessionFiles(CODEX_SESSIONS_ROOT);
+    const files = await listSessionFiles(DSH_SESSIONS_ROOT);
     for (const f of files) {
       try {
         const start = this.cursorStore?.get(f) ?? this.offsets.get(f) ?? 0;
@@ -63,9 +62,9 @@ export class CodexAdapter implements AgentAdapter {
   }
 
   async watch(onEvent: (e: HarnessEvent) => void): Promise<() => Promise<void>> {
-    const watcher: FSWatcher = chokidar.watch(path.join(CODEX_SESSIONS_ROOT, '**', '*.jsonl'), {
+    const watcher: FSWatcher = chokidar.watch(path.join(DSH_SESSIONS_ROOT, '**', '*.zstd'), {
       ignoreInitial: true,
-      awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 },
+      awaitWriteFinish: { stabilityThreshold: 500, pollInterval: 200 },
     });
 
     let busy = false;
@@ -92,24 +91,29 @@ export class CodexAdapter implements AgentAdapter {
   }
 
   async launch(opts: LaunchOptions, onEvent: (e: HarnessEvent) => void): Promise<TaskHandle> {
-    const child = spawn('codex', ['exec', '--json', ...(opts.model ? ['-m', opts.model] : []), opts.prompt], {
+    const child = spawn('dsh', ['--profile', 'headless', opts.prompt], {
       cwd: opts.cwd,
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     const id = opts.taskId;
-    let sessionId: string | null = null;
     let settled = false;
+    let outBuf = '';
     let errTail = '';
 
     const settle = (exitCode: number | null, state: 'done' | 'error') => {
       if (settled) return;
       settled = true;
+      const final = outBuf.trim();
+      if (final) {
+        onEvent({
+          ts: Date.now(), agent: 'dsh', projectDir: opts.cwd, sessionId: id,
+          kind: 'assistant-message', summary: truncate(final, 400),
+          meta: { taskId: id },
+        });
+      }
       onEvent({
-        ts: Date.now(),
-        agent: 'codex',
-        projectDir: opts.cwd,
-        sessionId: sessionId ?? id,
+        ts: Date.now(), agent: 'dsh', projectDir: opts.cwd, sessionId: id,
         kind: 'task-end',
         summary: state === 'done' ? '任务完成' : `任务异常退出${errTail ? ':' + truncate(errTail, 160) : ''}`,
         meta: { taskId: id, exitCode, state },
@@ -118,29 +122,15 @@ export class CodexAdapter implements AgentAdapter {
 
     child.on('error', (err) => {
       onEvent({
-        ts: Date.now(), agent: 'codex', projectDir: opts.cwd, sessionId: sessionId ?? id,
+        ts: Date.now(), agent: 'dsh', projectDir: opts.cwd, sessionId: id,
         kind: 'error', summary: `启动失败:${err.message}`, meta: { taskId: id },
       });
       settle(null, 'error');
     });
     child.on('close', (code) => settle(code, code === 0 ? 'done' : 'error'));
 
-    const rl = createInterface({ input: child.stdout! });
-    rl.on('line', (line) => {
-      let rec: Record<string, unknown>;
-      try {
-        rec = JSON.parse(line);
-      } catch {
-        return;
-      }
-      const payload = (rec.payload ?? {}) as Record<string, unknown>;
-      if (rec.type === 'session_meta' && payload.session_id) {
-        sessionId = payload.session_id as string;
-      }
-      for (const e of normalizeRecord(rec)) {
-        if (e.kind === 'user-message') continue; // 工具结果回显太噪,略过
-        onEvent({ ...e, sessionId: sessionId ?? e.sessionId, meta: { ...e.meta, taskId: id } });
-      }
+    child.stdout?.on('data', (chunk: Buffer) => {
+      outBuf += chunk.toString();
     });
     child.stderr?.on('data', (chunk: Buffer) => {
       errTail = (errTail + chunk.toString()).slice(-600);
@@ -171,27 +161,19 @@ export class CodexAdapter implements AgentAdapter {
     };
   }
 
-  /**
-   * 探测 Codex CLI 任务进程。
-   * 只认进程名恰为 codex 的 CLI 会话(app-server / code-mode-host 等桌面常驻排除)。
-   */
+  /** 探测 DSH 任务进程;排除常驻的 `dsh web`(OpenHarness 自身就运行在其中)。 */
   async probe(): Promise<boolean> {
     return new Promise((resolve) => {
-      execFile('pgrep', ['-x', 'codex'], (err, stdout) => {
+      execFile('pgrep', ['-fl', 'dsh'], (err, stdout) => {
         if (err) return resolve(false);
-        const pids = (stdout ?? '').split('\n').filter(Boolean);
-        if (pids.length === 0) return resolve(false);
-        execFile('ps', ['-o', 'args=', '-p', pids.join(',')], (err2, out) => {
-          if (err2) return resolve(false);
-          const lines = (out ?? '').split('\n').filter((l) => l.trim());
-          resolve(lines.some((l) => !/app-server|code-mode-host/.test(l)));
-        });
+        const lines = (stdout ?? '').split('\n').filter((l) => l.trim());
+        resolve(lines.some((l) => !/\bdsh web\b/.test(l) && /\bdsh\b/.test(l)));
       });
     });
   }
 
   resumeCommand(sessionId: string): string {
-    return `codex resume ${sessionId}`;
+    return `dsh --profile tui --resume ${sessionId}`;
   }
 
   describeStatus(extra: Pick<AgentStatus, 'activeTasks' | 'sessionsCount'>): AgentStatus {

@@ -2,12 +2,13 @@
 
 个人 Agent 控制台:统一入口页面,管理、操作、监控你的多个 Agent 工具(Cursor、Claude Code、Codex、DeepSeek Harness),保留各工具自身特色。
 
-## 现状(v0.1,两个 Agent 已接入)
+## 现状(v0.1,四个 Agent 全部接入)
 
 - ✅ Claude Code 适配器:会话索引(JSONL 解析 + SQLite)、实时监听、CLI 任务发射/打断、深链恢复命令
 - ✅ Codex 适配器:rollout JSONL 索引/监听、`codex exec --json` 发射/打断、`codex resume` 深链
+- ✅ Cursor 适配器:conversation-search.db 会话索引、`cursor-agent` 发射(需先 `cursor-agent login`)、`cursor agent --resume` 深链
+- ✅ DSH 适配器:zstd 会话解析/监听、`dsh --profile headless` 发射、`dsh --profile tui --resume` 深链
 - ✅ 控制台 UI:Agent 状态卡(LED 信号表)、统一活动流(实时推送)、发任务面板(按特色匹配的建议引擎)、会话索引页 + 会话详情抽屉(统计/时间线/恢复命令复制)
-- ⏳ 待接入:Cursor、DSH 适配器
 
 ## 快速开始
 

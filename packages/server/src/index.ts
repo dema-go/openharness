@@ -9,7 +9,7 @@ import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import type { AgentAdapter, AgentId, AgentStatus, HarnessEvent } from '@openharness/core';
 import { AGENT_DISPLAY, AGENT_IDS } from '@openharness/core';
-import { ClaudeAdapter, CodexAdapter } from '@openharness/agents';
+import { ClaudeAdapter, CodexAdapter, DshAdapter, CursorAdapter } from '@openharness/agents';
 import { broadcast, onMessage } from './bus.js';
 import { createApp } from './routes.js';
 import { Store } from './store.js';
@@ -32,10 +32,12 @@ async function main(): Promise<void> {
     broadcast({ type: 'event', data: e });
   };
 
-  // 适配器注册表(cursor/dsh 适配器未实现,显示为未接入)
+  // 适配器注册表(四个工具全部接入)
   const adapters = new Map<AgentId, AgentAdapter>();
   adapters.set('claude', new ClaudeAdapter(store));
   adapters.set('codex', new CodexAdapter(store));
+  adapters.set('dsh', new DshAdapter(store));
+  adapters.set('cursor', new CursorAdapter(store));
   const enabledAgents = new Set<AgentId>([...adapters.keys()]);
 
   // ---- 状态缓存与轮询 ----

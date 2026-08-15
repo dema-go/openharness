@@ -102,6 +102,7 @@ export class ClaudeAdapter implements AgentAdapter {
     const id = opts.taskId;
     let sessionId: string | null = null;
     let settled = false;
+    let errTail = '';
 
     const settle = (exitCode: number | null, state: 'done' | 'error') => {
       if (settled) return;
@@ -112,7 +113,7 @@ export class ClaudeAdapter implements AgentAdapter {
         projectDir: opts.cwd,
         sessionId: sessionId ?? id,
         kind: 'task-end',
-        summary: state === 'done' ? '任务完成' : '任务异常退出',
+        summary: state === 'done' ? '任务完成' : `任务异常退出${errTail ? ':' + truncate(errTail, 160) : ''}`,
         meta: { taskId: id, exitCode, state },
       });
     };
@@ -149,8 +150,8 @@ export class ClaudeAdapter implements AgentAdapter {
         onEvent({ ...e, sessionId: sessionId ?? e.sessionId, meta: { ...e.meta, taskId: id } });
       }
     });
-    child.stderr?.on('data', () => {
-      /* stderr 仅调试用,不进入事件流 */
+    child.stderr?.on('data', (chunk: Buffer) => {
+      errTail = (errTail + chunk.toString()).slice(-600);
     });
 
     return {

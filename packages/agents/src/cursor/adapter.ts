@@ -1,0 +1,287 @@
+/**
+ * CursorAdapter:Cursor 的 OpenHarness 接入层。
+ *
+ * 历史会话:Cursor 的会话检索库 conversation-search.db 的 conversations 表
+ * (id / title / updated_at;只读)。实时:经 `cursor-agent --print --output-format
+ * stream-json` 发射任务并流式归一化。打断 = 进程组 SIGINT;
+ * 深链 = `cursor agent --resume <chatId>`。
+ */
+import { spawn, execFile } from 'node:child_process';
+import os from 'node:os';
+import path from 'node:path';
+import { createInterface } from 'node:readline';
+import { DatabaseSync } from 'node:sqlite';
+import chokidar, { type FSWatcher } from 'chokidar';
+import {
+  type AgentAdapter,
+  type AgentStatus,
+  type CursorStore,
+  type HarnessEvent,
+  type IndexHandlers,
+  type LaunchOptions,
+  type SessionSummary,
+  type TaskHandle,
+  truncate,
+} from '@openharness/core';
+
+export const CURSOR_SEARCH_DB = path.join(
+  os.homedir(),
+  'Library',
+  'Application Support',
+  'Cursor',
+  'User',
+  'globalStorage',
+  'conversation-search.db',
+);
+
+interface ConversationRow {
+  id: string;
+  title: string;
+  updated_at: number;
+}
+
+function listConversations(dbPath: string): ConversationRow[] {
+  const db = new DatabaseSync(dbPath, { readOnly: true });
+  try {
+    const rows = db.prepare('SELECT id, title, updated_at FROM conversations').all() as Array<
+      Record<string, unknown>
+    >;
+    return rows.map((r) => ({
+      id: String(r.id),
+      title: String(r.title ?? ''),
+      updated_at: Number(r.updated_at ?? 0),
+    }));
+  } finally {
+    db.close();
+  }
+}
+
+function collectText(content: unknown): string {
+  if (!Array.isArray(content)) return '';
+  return content
+    .filter((c): c is { type: string; text?: string } => c && typeof c === 'object' && c.type === 'text')
+    .map((c) => c.text ?? '')
+    .join('\n');
+}
+
+/** 把 cursor-agent 的流式记录归一化(协议与 Claude 类似,容错处理) */
+function normalizeStreamRecord(rec: Record<string, unknown>): HarnessEvent[] {
+  const type = rec.type as string | undefined;
+  const sessionId = (rec.session_id ?? rec.chatId ?? '') as string;
+  const cwd = (rec.cwd as string) ?? null;
+  const ts = typeof rec.timestamp === 'string' && rec.timestamp ? Date.parse(rec.timestamp) : Date.now();
+  const base = { agent: 'cursor' as const, projectDir: cwd, sessionId, ts };
+
+  if (type === 'system' && rec.subtype === 'init') {
+    return [{ ...base, kind: 'session-start', summary: `任务会话开始(${String(rec.model ?? '模型')})`, meta: { model: rec.model } }];
+  }
+  if (type === 'assistant') {
+    const message = (rec.message ?? {}) as Record<string, unknown>;
+    const content = (message.content ?? []) as Array<Record<string, unknown>>;
+    const events: HarnessEvent[] = [];
+    for (const c of content) {
+      if (c.type === 'text' && typeof c.text === 'string' && c.text.trim()) {
+        events.push({ ...base, kind: 'assistant-message', summary: truncate(c.text) });
+      } else if (c.type === 'tool_use') {
+        events.push({ ...base, kind: 'tool-call', summary: `调用工具 ${String(c.name ?? '?')}`, meta: { tool: c.name } });
+      }
+    }
+    return events;
+  }
+  if (type === 'user') {
+    const text = collectText((rec.message as { content?: unknown } | undefined)?.content);
+    return text ? [{ ...base, kind: 'user-message', summary: truncate(text) }] : [];
+  }
+  return [];
+}
+
+export class CursorAdapter implements AgentAdapter {
+  readonly agentId = 'cursor' as const;
+  readonly displayName = 'Cursor';
+  readonly enabled = true;
+
+  constructor(private readonly cursorStore?: CursorStore) {}
+
+  async listSessions(): Promise<SessionSummary[]> {
+    const rows = listConversations(CURSOR_SEARCH_DB);
+    return rows
+      .map((r) => this.toSummary(r))
+      .sort((a, b) => b.lastTs - a.lastTs);
+  }
+
+  async indexEvents(handlers: IndexHandlers): Promise<void> {
+    const rows = listConversations(CURSOR_SEARCH_DB);
+    for (const r of rows) {
+      const cursorKey = `cursor-conv:${r.id}`;
+      if (this.cursorStore?.get(cursorKey)) continue;
+      this.cursorStore?.set(cursorKey, 1);
+      handlers.onSummary(this.toSummary(r));
+      handlers.onEvent({
+        ts: r.updated_at,
+        agent: 'cursor',
+        projectDir: null,
+        sessionId: r.id,
+        kind: 'session-start',
+        summary: `会话开始:${r.title || `会话 ${r.id.slice(0, 8)}`}`,
+        meta: { chatId: r.id },
+      });
+    }
+  }
+
+  async watch(onEvent: (e: HarnessEvent) => void): Promise<() => Promise<void>> {
+    // conversation-search.db 随 Cursor 使用而更新;变化时增量发现新会话
+    const watcher: FSWatcher = chokidar.watch(CURSOR_SEARCH_DB, {
+      ignoreInitial: true,
+      awaitWriteFinish: { stabilityThreshold: 800, pollInterval: 300 },
+    });
+    let busy = false;
+    const refresh = async () => {
+      if (busy) return;
+      busy = true;
+      try {
+        for (const r of listConversations(CURSOR_SEARCH_DB)) {
+          const cursorKey = `cursor-conv:${r.id}`;
+          if (this.cursorStore?.get(cursorKey)) continue;
+          this.cursorStore?.set(cursorKey, 1);
+          onEvent({
+            ts: r.updated_at,
+            agent: 'cursor',
+            projectDir: null,
+            sessionId: r.id,
+            kind: 'session-start',
+            summary: `新会话:${r.title || `会话 ${r.id.slice(0, 8)}`}`,
+            meta: { chatId: r.id },
+          });
+        }
+      } catch {
+        // DB 可能被锁,下轮再试
+      } finally {
+        busy = false;
+      }
+    };
+    watcher.on('add', () => void refresh());
+    watcher.on('change', () => void refresh());
+
+    return async () => {
+      await watcher.close();
+    };
+  }
+
+  async launch(opts: LaunchOptions, onEvent: (e: HarnessEvent) => void): Promise<TaskHandle> {
+    // 优先直连 cursor-agent;未安装则退回 `cursor agent` 包装命令
+    const [bin, prefix] = await this.resolveBinary();
+    const child = spawn(
+      bin,
+      [...prefix, '--print', '--output-format', 'stream-json', ...(opts.model ? ['--model', opts.model] : []), opts.prompt],
+      { cwd: opts.cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    const id = opts.taskId;
+    let sessionId: string | null = null;
+    let settled = false;
+    let errTail = '';
+
+    const settle = (exitCode: number | null, state: 'done' | 'error') => {
+      if (settled) return;
+      settled = true;
+      onEvent({
+        ts: Date.now(), agent: 'cursor', projectDir: opts.cwd, sessionId: sessionId ?? id,
+        kind: 'task-end',
+        summary: state === 'done' ? '任务完成' : `任务异常退出${errTail ? ':' + truncate(errTail, 160) : ''}`,
+        meta: { taskId: id, exitCode, state },
+      });
+    };
+
+    child.on('error', (err) => {
+      onEvent({
+        ts: Date.now(), agent: 'cursor', projectDir: opts.cwd, sessionId: sessionId ?? id,
+        kind: 'error', summary: `启动失败:${err.message}`, meta: { taskId: id },
+      });
+      settle(null, 'error');
+    });
+    child.on('close', (code) => settle(code, code === 0 ? 'done' : 'error'));
+
+    const rl = createInterface({ input: child.stdout! });
+    rl.on('line', (line) => {
+      let rec: Record<string, unknown>;
+      try {
+        rec = JSON.parse(line);
+      } catch {
+        return;
+      }
+      if (rec.type === 'system' && rec.subtype === 'init') {
+        sessionId = (rec.session_id as string) ?? (rec.chatId as string) ?? sessionId;
+      }
+      if (rec.type === 'result' && rec.session_id) sessionId = rec.session_id as string;
+      for (const e of normalizeStreamRecord(rec)) {
+        if (e.kind === 'user-message') continue; // 回显略过
+        onEvent({ ...e, sessionId: sessionId ?? e.sessionId, meta: { ...e.meta, taskId: id } });
+      }
+    });
+    child.stderr?.on('data', (chunk: Buffer) => {
+      errTail = (errTail + chunk.toString()).slice(-600);
+    });
+
+    return {
+      id,
+      pid: child.pid,
+      stop: () =>
+        new Promise<void>((resolve) => {
+          if (settled || !child.pid) return resolve();
+          const killer = setTimeout(() => {
+            try {
+              process.kill(-child.pid!, 'SIGKILL');
+            } catch { /* 已退出 */ }
+          }, 5000);
+          child.once('close', () => {
+            clearTimeout(killer);
+            resolve();
+          });
+          try {
+            process.kill(-child.pid, 'SIGINT');
+          } catch {
+            clearTimeout(killer);
+            resolve();
+          }
+        }),
+    };
+  }
+
+  /** 探测 cursor-agent CLI 进程(IDE 本体不算) */
+  async probe(): Promise<boolean> {
+    return new Promise((resolve) => {
+      execFile('pgrep', ['-x', 'cursor-agent'], (err) => resolve(!err));
+    });
+  }
+
+  resumeCommand(sessionId: string): string {
+    return `cursor agent --resume ${sessionId}`;
+  }
+
+  describeStatus(extra: Pick<AgentStatus, 'activeTasks' | 'sessionsCount'>): AgentStatus {
+    return { agent: this.agentId, state: 'idle', enabled: this.enabled, ...extra };
+  }
+
+  private toSummary(r: ConversationRow): SessionSummary {
+    return {
+      agent: this.agentId,
+      sessionId: r.id,
+      projectDir: null,
+      title: r.title || `会话 ${r.id.slice(0, 8)}`,
+      firstTs: r.updated_at,
+      lastTs: r.updated_at,
+      messageCount: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      resumeCommand: this.resumeCommand(r.id),
+    };
+  }
+
+  private async resolveBinary(): Promise<[string, string[]]> {
+    return new Promise((resolve) => {
+      execFile('which', ['cursor-agent'], (err) => {
+        if (!err) return resolve(['cursor-agent', []]);
+        resolve(['cursor', ['agent']]);
+      });
+    });
+  }
+}
