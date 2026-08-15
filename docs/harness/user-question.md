@@ -68,7 +68,7 @@
 
 愿景:查看日志找到问题原因并修复。
 
-> ✅ v0.3.1 交付:定位为 cursor-agent 未登录(OAuth,与 Cursor IDE 登录态不共享);失败时给出可操作提示(终端执行 cursor-agent login 或设置 CURSOR_API_KEY)。登录需本人操作,回来执行一次即可。
+> ✅ v0.3.1 交付:定位为 cursor-agent 未登录(OAuth,与 Cursor IDE 登录态不共享);失败时给出可操作提示。用户已执行 cursor-agent login,实测通过:直接任务与对话室任务均全自主完成(「收到」回复,exit 0),四工具全自主验证全部收齐。
 
 ### 4. 对话室的页面长度
 
