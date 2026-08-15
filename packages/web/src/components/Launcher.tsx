@@ -227,7 +227,7 @@ export function Launcher(props: {
 
             {tasks.length > 0 && (
               <div>
-                <p className="mb-2 font-mono text-[11px] text-faint">本次会话的任务</p>
+                <p className="mb-2 font-mono text-[11px] text-faint">任务历史(最近 50 条,重启保留)</p>
                 <ul className="space-y-2">
                   {tasks.map((t) => (
                     <li

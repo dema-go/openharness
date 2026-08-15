@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import type { AgentAdapter, HarnessEvent, LaunchOptions, TaskHandle, TaskInfo } from '@openharness/core';
 import { truncate } from '@openharness/core';
 import { broadcast } from './bus.js';
+import type { Store } from './store.js';
 
 interface ManagedTask {
   info: TaskInfo;
@@ -24,7 +25,24 @@ export class TaskManager {
 
   constructor(
     private readonly pipeline: (e: HarnessEvent) => void,
+    private readonly store?: Store,
   ) {}
+
+  /** 服务启动时恢复历史任务;遗留的 running/queued 归位(中断/清除) */
+  async recover(): Promise<void> {
+    if (!this.store) return;
+    this.store.settleStaleTasks(Date.now());
+    for (const t of this.store.loadTasks()) {
+      this.tasks.set(t.id, {
+        info: t,
+        adapter: null as unknown as AgentAdapter,
+        requestStop: () => undefined,
+      });
+    }
+    if (this.tasks.size) {
+      console.log(`[openharness] 已恢复 ${this.tasks.size} 条任务历史`);
+    }
+  }
 
   /** 立即启动(不排队;允许同一 Agent 并发) */
   async start(adapter: AgentAdapter, opts: Omit<LaunchOptions, 'taskId'>): Promise<TaskInfo> {
@@ -171,6 +189,7 @@ export class TaskManager {
   }
 
   private broadcastTask(info: TaskInfo): void {
+    this.store?.upsertTask(info);
     broadcast({ type: 'task', data: { ...info } });
   }
 

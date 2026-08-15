@@ -5,7 +5,7 @@
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import type { CursorStore, HarnessEvent, SessionSummary } from '@openharness/core';
+import type { CursorStore, HarnessEvent, SessionSummary, TaskInfo } from '@openharness/core';
 
 export class Store implements CursorStore {
   private readonly db: Database.Database;
@@ -45,6 +45,17 @@ export class Store implements CursorStore {
       CREATE TABLE IF NOT EXISTS cursors (
         file_path TEXT PRIMARY KEY,
         offset INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS tasks (
+        id TEXT PRIMARY KEY,
+        agent TEXT NOT NULL,
+        cwd TEXT NOT NULL,
+        prompt TEXT NOT NULL,
+        session_id TEXT,
+        state TEXT NOT NULL,
+        started_at INTEGER NOT NULL,
+        ended_at INTEGER,
+        exit_code INTEGER
       );
     `);
   }
@@ -193,6 +204,60 @@ export class Store implements CursorStore {
     ).map((r) => ({ project: r.p, input: r.i, output: r.o }));
 
     return { total: { input: total.i, output: total.o }, toolCalls: toolCalls.n, byAgent, byDay, byProject };
+  }
+
+  // ---- tasks 持久化 ----
+  upsertTask(t: TaskInfo): void {
+    this.db
+      .prepare(
+        `INSERT INTO tasks (id, agent, cwd, prompt, session_id, state, started_at, ended_at, exit_code)
+         VALUES (@id, @agent, @cwd, @prompt, @sessionId, @state, @startedAt, @endedAt, @exitCode)
+         ON CONFLICT(id) DO UPDATE SET
+           agent = excluded.agent, cwd = excluded.cwd, prompt = excluded.prompt,
+           session_id = excluded.session_id, state = excluded.state,
+           started_at = excluded.started_at, ended_at = excluded.ended_at, exit_code = excluded.exit_code`,
+      )
+      .run({
+        ...t,
+        sessionId: t.sessionId ?? null,
+        endedAt: t.endedAt ?? null,
+        exitCode: t.exitCode ?? null,
+      });
+    // 保留最近 300 条,防无限膨胀
+    this.db
+      .prepare(
+        `DELETE FROM tasks WHERE id NOT IN (
+           SELECT id FROM tasks ORDER BY started_at DESC LIMIT 300
+         )`,
+      )
+      .run();
+  }
+
+  loadTasks(): TaskInfo[] {
+    const rows = this.db
+      .prepare('SELECT * FROM tasks ORDER BY started_at DESC LIMIT 300')
+      .all() as Array<Record<string, unknown>>;
+    return rows.map((r) => ({
+      id: r.id as string,
+      agent: r.agent as TaskInfo['agent'],
+      cwd: r.cwd as string,
+      prompt: r.prompt as string,
+      sessionId: (r.session_id as string | null) ?? null,
+      state: r.state as TaskInfo['state'],
+      startedAt: r.started_at as number,
+      endedAt: r.ended_at != null ? (r.ended_at as number) : undefined,
+      exitCode: r.exit_code != null ? (r.exit_code as number) : undefined,
+    }));
+  }
+
+  /** 服务重启后,把遗留的 running/queued 任务归位 */
+  settleStaleTasks(now: number): void {
+    this.db
+      .prepare(
+        `UPDATE tasks SET state = CASE state WHEN 'queued' THEN 'stopped' ELSE 'error' END, ended_at = ?
+         WHERE state IN ('running', 'queued')`,
+      )
+      .run(now);
   }
 
   close(): void {

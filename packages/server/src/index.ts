@@ -83,7 +83,8 @@ async function main(): Promise<void> {
     return events[0]?.ts;
   }
 
-  const tasks = new TaskManager(pipeline);
+  const tasks = new TaskManager(pipeline, store);
+  await tasks.recover();
 
   // ---- 启动索引 + 实时监听 ----
   const stopWatches: Array<() => Promise<void>> = [];
