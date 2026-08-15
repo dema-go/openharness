@@ -58,6 +58,10 @@ export function Launcher(props: {
   const submit = async () => {
     setBusy(true);
     setError(null);
+    // 首次发任务时请求桌面通知权限(任务收尾提醒)
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      void Notification.requestPermission();
+    }
     try {
       const t = await api.startTask({ agent, cwd: cwd.trim(), prompt: prompt.trim() });
       props.onTask(t);

@@ -44,4 +44,10 @@ export const api = {
       `/suggest?prompt=${encodeURIComponent(prompt)}`,
     ),
   usage: () => j<UsageReport>('/usage'),
+  openInTerminal: (agent: string, sessionId: string) =>
+    j<{ ok: boolean; command: string }>('/deeplink', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ agent, sessionId }),
+    }),
 };

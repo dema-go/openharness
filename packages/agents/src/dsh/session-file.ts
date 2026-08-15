@@ -113,22 +113,29 @@ export async function parseSessionFile(
 
   for (const line of lines) {
     if (!line.trim()) continue;
-    if (consumed < (opts.offset ?? 0)) {
-      consumed++;
-      continue;
-    }
-    consumed++;
     let rec: Record<string, unknown>;
     try {
       rec = JSON.parse(line);
     } catch {
+      consumed++;
       continue;
     }
+    const isNew = consumed >= (opts.offset ?? 0);
+    consumed++;
+
+    // 会话元数据全量提取:游标只控制事件回放,元数据永远解析
+    // (文件可能被工具截断/改写,游标越界时也必须能恢复会话身份)
     if (rec.type === 'session') {
       sessionId = String(rec.id ?? sessionId);
       projectDir = (rec.cwd as string) ?? projectDir;
       if (typeof rec.createdAt === 'number' && firstTs === 0) firstTs = rec.createdAt;
     }
+    if (!title && rec.type === 'user/message') {
+      const t = collectText((rec.data as { content?: unknown } | undefined)?.content).trim();
+      if (t) title = truncate(t, 80);
+    }
+    if (!isNew) continue;
+
     const events = normalizeRecord(rec);
     for (const e of events) {
       const ev = { ...e, sessionId, projectDir: projectDir ?? e.projectDir };
@@ -144,7 +151,11 @@ export async function parseSessionFile(
     }
   }
 
-  if (!sessionId) sessionId = filePath.split('/').find((s) => s.startsWith('session-')) ?? 'unknown';
+  if (!sessionId) {
+    // 兜底:取父目录名(session-* 或 od-* 命名)
+    const parent = filePath.split('/').at(-2) ?? '';
+    sessionId = /^(session|od)-[a-z0-9-]+$/i.test(parent) ? parent : 'unknown';
+  }
   if (firstTs === 0) firstTs = Date.now();
   if (lastTs === 0) lastTs = firstTs;
 

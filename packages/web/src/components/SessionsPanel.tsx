@@ -144,6 +144,8 @@ function SessionDetail(props: {
   const { session } = props;
   const [events, setEvents] = useState<HarnessEvent[] | null>(null);
   const [copied, setCopied] = useState(false);
+  const [opening, setOpening] = useState(false);
+  const [openError, setOpenError] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -242,6 +244,23 @@ function SessionDetail(props: {
               className="shrink-0 rounded-sm border border-line px-3 py-2 font-mono text-[12px] text-dim transition-colors hover:border-amber/60 hover:text-amber"
             >
               {copied ? '已复制 ✓' : '复制'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setOpening(true);
+                void api
+                  .openInTerminal(session.agent, session.sessionId)
+                  .catch(() => {
+                    setOpenError(true);
+                    setTimeout(() => setOpenError(false), 2500);
+                  })
+                  .finally(() => setOpening(false));
+              }}
+              disabled={opening}
+              className="shrink-0 rounded-sm border border-amber/60 bg-amber/10 px-3 py-2 font-mono text-[12px] text-amber transition-colors hover:bg-amber/20 disabled:opacity-40"
+            >
+              {openError ? '打开失败' : opening ? '打开中…' : '在终端打开'}
             </button>
           </div>
         </div>

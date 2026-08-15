@@ -69,7 +69,23 @@ export function App(): React.JSX.Element {
       const rest = prev.filter((x) => x.id !== t.id);
       return [t, ...rest];
     });
-    if (t.state !== 'running') refreshSessions();
+    if (t.state !== 'running') {
+      refreshSessions();
+      // 桌面通知:任务收尾时提醒(页面打开期间)
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        const label =
+          t.state === 'done'
+            ? '任务完成'
+            : t.state === 'stopped'
+              ? '任务已打断'
+              : '任务失败';
+        try {
+          new Notification(`${label} · ${AGENT_DISPLAY[t.agent]}`, { body: t.prompt.slice(0, 120) });
+        } catch {
+          /* 通知不可用 */
+        }
+      }
+    }
   }, [refreshSessions]);
 
   const onStatus = useCallback((s: AgentStatus[]) => setStatuses(s), []);

@@ -12,6 +12,7 @@ import { onMessage, type BusMessage } from './bus.js';
 import type { Store } from './store.js';
 import { suggest, type Suggestion } from './suggest.js';
 import type { TaskManager } from './tasks.js';
+import { openInTerminal } from './terminal.js';
 
 export interface AppDeps {
   store: Store;
@@ -83,6 +84,23 @@ export function createApp(deps: AppDeps): { app: Hono; nodeWs: NodeWebSocket } {
   });
 
   app.get('/api/usage', (c) => c.json(store.usage()));
+
+  // 深链:在新 Terminal 窗口中执行原生工具的恢复命令(仅本机,用户触发)
+  app.post('/api/deeplink', async (c) => {
+    const body = await c.req.json<{ agent?: string; sessionId?: string }>();
+    const adapter = body.agent ? getAdapter(body.agent as TaskInfo['agent']) : undefined;
+    if (!adapter || !body.sessionId) return c.json({ error: '参数无效' }, 400);
+    const command = adapter.resumeCommand(body.sessionId);
+    try {
+      await openInTerminal(command);
+      return c.json({ ok: true, command });
+    } catch (err) {
+      return c.json(
+        { error: `无法打开终端:${err instanceof Error ? err.message : String(err)}` },
+        500,
+      );
+    }
+  });
   const { upgradeWebSocket } = nodeWs;
   const disposers = new WeakMap<WSContext, () => void>();
 
