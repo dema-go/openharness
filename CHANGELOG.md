@@ -23,6 +23,18 @@
 ### 工程
 - terminal-notifier 安装至 /opt/homebrew(brew 升级受网络限制,经 GitHub API 直装)
 
+## [v0.3.2] - 2026-08-15
+
+第 2 轮反馈复测(#4)与补充反馈(#7/#8),均为根因级修复。
+
+### 修复
+- **对话室页面越聊越长**(#4 复测未修复的真根因):tab 内容容器缺 `flex`,面板无法被高度约束,长对话把整页撑爆(实测页面总高 3000+px、发送框被推出版面)。补上 flex 约束后,30+ 条消息长对话页面零滚动、发送框固定、自动跟随最新
+- **会话档案无轨迹数据**(#7):codex 旧解析器把消息事件散落到条目 ID 下(`response_item.payload.id` 是条目 ID 而非会话 ID),且消费完的文件重启后把会话汇总清零 → 文件级统一覆盖会话 ID、已消费文件跳过,并一次性重建索引(meta 迁移 `reindex-v1.2`);cursor 接入 conversation-search.db 的 FTS body,时间线展示对话全文摘要,标题回退 FTS
+- **Codex CLI 无法对话**(#8):① CLI 不读 macOS 系统代理,直连 OpenAI 超时(App 正常)→ 适配器经 `scutil --proxy` 解析并注入代理环境变量;② CLI v0.144+ 的 `--json` 流改用 `item.completed` 格式,旧解析器漏掉回复 → 支持新格式。实测任务 12 秒完成、回复正常(此前 4 分钟重连后失败)
+- **chokidar v4 绝对路径 + glob 不触发**(顺带发现):三个适配器(claude/codex/dsh)的实时 watcher 全部失效 → 改为监听根目录 + 处理器按扩展名过滤,合成文件实测实时索引恢复
+
+### 工程
+- Store 新增 meta 表 + `resetAgentIndex`(一次性索引重建迁移)
 ## [v0.3.0] - 2026-08-15
 
 用户反馈闭环第 1 轮(docs/harness/user-question.md),全部交付并端到端实测。

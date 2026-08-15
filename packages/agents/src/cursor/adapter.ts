@@ -40,18 +40,26 @@ export const CURSOR_SEARCH_DB = path.join(
 interface ConversationRow {
   id: string;
   title: string;
+  ftsTitle: string;
+  body: string;
   updated_at: number;
 }
 
 function listConversations(dbPath: string): ConversationRow[] {
   const db = new DatabaseSync(dbPath, { readOnly: true });
   try {
-    const rows = db.prepare('SELECT id, title, updated_at FROM conversations').all() as Array<
-      Record<string, unknown>
-    >;
+    const rows = db
+      .prepare(
+        `SELECT c.id, c.title, c.updated_at, f.title AS fts_title, f.body AS body
+         FROM conversations c
+         LEFT JOIN conversation_fts f ON f.rowid = c.fts_rowid`,
+      )
+      .all() as Array<Record<string, unknown>>;
     return rows.map((r) => ({
       id: String(r.id),
       title: String(r.title ?? ''),
+      ftsTitle: String(r.fts_title ?? ''),
+      body: String(r.body ?? ''),
       updated_at: Number(r.updated_at ?? 0),
     }));
   } finally {
@@ -128,9 +136,21 @@ export class CursorAdapter implements AgentAdapter {
         projectDir: null,
         sessionId: r.id,
         kind: 'session-start',
-        summary: `会话开始:${r.title || `会话 ${r.id.slice(0, 8)}`}`,
+        summary: `会话开始:${r.title || r.ftsTitle || `会话 ${r.id.slice(0, 8)}`}`,
         meta: { chatId: r.id },
       });
+      // search-db 的 FTS body 存有会话全文(无角色分段):以一条消息事件呈现对话轨迹
+      if (r.body.trim()) {
+        handlers.onEvent({
+          ts: r.updated_at,
+          agent: 'cursor',
+          projectDir: null,
+          sessionId: r.id,
+          kind: 'user-message',
+          summary: `对话内容(共 ${r.body.length} 字):${truncate(r.body, 300)}`,
+          meta: { chatId: r.id },
+        });
+      }
     }
   }
 
@@ -155,9 +175,20 @@ export class CursorAdapter implements AgentAdapter {
             projectDir: null,
             sessionId: r.id,
             kind: 'session-start',
-            summary: `新会话:${r.title || `会话 ${r.id.slice(0, 8)}`}`,
+            summary: `新会话:${r.title || r.ftsTitle || `会话 ${r.id.slice(0, 8)}`}`,
             meta: { chatId: r.id },
           });
+          if (r.body.trim()) {
+            onEvent({
+              ts: r.updated_at,
+              agent: 'cursor',
+              projectDir: null,
+              sessionId: r.id,
+              kind: 'user-message',
+              summary: `对话内容(共 ${r.body.length} 字):${truncate(r.body, 300)}`,
+              meta: { chatId: r.id },
+            });
+          }
         }
       } catch {
         // DB 可能被锁,下轮再试
@@ -322,10 +353,10 @@ export class CursorAdapter implements AgentAdapter {
       agent: this.agentId,
       sessionId: r.id,
       projectDir: null,
-      title: r.title || `会话 ${r.id.slice(0, 8)}`,
+      title: r.title || r.ftsTitle || `会话 ${r.id.slice(0, 8)}`,
       firstTs: r.updated_at,
       lastTs: r.updated_at,
-      messageCount: 0,
+      messageCount: r.body.trim() ? 1 : 0,
       inputTokens: 0,
       outputTokens: 0,
       resumeCommand: this.resumeCommand(r.id),

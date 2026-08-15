@@ -92,6 +92,10 @@ export class Store implements CursorStore {
         cwd TEXT,
         PRIMARY KEY (conv_id, agent)
       );
+      CREATE TABLE IF NOT EXISTS meta (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
     `);
     // 迁移:旧库 events 表补 model 列(按模型用量聚合)
     const cols = this.db.prepare('PRAGMA table_info(events)').all() as Array<{ name: string }>;
@@ -521,6 +525,26 @@ export class Store implements CursorStore {
     this.db.prepare('DELETE FROM conversation_messages WHERE conv_id = ?').run(id);
     this.db.prepare('DELETE FROM conversation_agents WHERE conv_id = ?').run(id);
     return true;
+  }
+
+  // ---- meta 与一次性迁移 ----
+
+  getMeta(key: string): string | undefined {
+    const row = this.db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as
+      | { value: string }
+      | undefined;
+    return row?.value;
+  }
+
+  setMeta(key: string, value: string): void {
+    this.db.prepare('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value);
+  }
+
+  /** 重建某 Agent 的会话索引:清掉其事件/会话汇总/文件游标(数据可从本地文件再推导) */
+  resetAgentIndex(agent: string, cursorPrefix: string): void {
+    this.db.prepare('DELETE FROM events WHERE agent = ?').run(agent);
+    this.db.prepare('DELETE FROM sessions WHERE agent = ?').run(agent);
+    this.db.prepare('DELETE FROM cursors WHERE file_path LIKE ?').run(cursorPrefix);
   }
 }
 

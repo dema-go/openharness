@@ -5,7 +5,7 @@
  * - 打断 = 进程组 SIGINT;深链 = `codex resume <sessionId>`
  * - probe 排除 ChatGPT 桌面 App 的常驻 codex 进程,只认 CLI 任务进程
  */
-import { spawn, execFile } from 'node:child_process';
+import { spawn, execFile, execFileSync } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -28,6 +28,38 @@ import { entry, parseTomlSections, patchToml } from '../config-utils.js';
 import { listSessionFiles, normalizeRecord, parseSessionFile, type ParseResult } from './session-file.js';
 
 export const CODEX_SESSIONS_ROOT = path.join(os.homedir(), '.codex', 'sessions');
+
+let proxyEnvCache: { env: Record<string, string>; at: number } | undefined;
+
+/**
+ * Codex CLI 不读 macOS 系统代理:本机开了系统代理(如 Clash)而 shell 环境无
+ * HTTP(S)_PROXY 时,CLI 直连 OpenAI 会超时(Codex App 正常、CLI 报
+ * "request timed out" 的典型根因)。从 scutil --proxy 解析并注入代理环境变量。
+ */
+function systemProxyEnv(): Record<string, string> {
+  if (process.env.HTTPS_PROXY || process.env.HTTP_PROXY) return {};
+  const now = Date.now();
+  if (proxyEnvCache && now - proxyEnvCache.at < 60_000) return proxyEnvCache.env;
+  let env: Record<string, string> = {};
+  try {
+    const out = execFileSync('scutil', ['--proxy'], { encoding: 'utf8', timeout: 3000 });
+    const get = (k: string): string => {
+      const m = out.match(new RegExp(`${k}\\s*:\\s*(\\d+)`));
+      return m ? m[1]! : '';
+    };
+    if (get('HTTPSEnable') === '1' || get('HTTPEnable') === '1' || get('SOCKSEnable') === '1') {
+      const port = get('HTTPSPort') || get('HTTPPort') || get('SOCKSPort');
+      if (port) {
+        const proxy = `http://127.0.0.1:${port}`;
+        env = { HTTP_PROXY: proxy, HTTPS_PROXY: proxy, ALL_PROXY: proxy, http_proxy: proxy, https_proxy: proxy };
+      }
+    }
+  } catch {
+    /* scutil 不可用,按直连 */
+  }
+  proxyEnvCache = { env, at: now };
+  return env;
+}
 
 export class CodexAdapter implements AgentAdapter {
   readonly agentId = 'codex' as const;
@@ -56,6 +88,10 @@ export class CodexAdapter implements AgentAdapter {
     for (const f of files) {
       try {
         const start = this.cursorStore?.get(f) ?? this.offsets.get(f) ?? 0;
+        // 已消费完的文件跳过:否则 offset=文件大小 时解析出"空会话",
+        // 把库里已有的会话汇总覆盖成 messageCount=0
+        const size = (await fs.stat(f)).size;
+        if (start >= size) continue;
         const r = await parseSessionFile(f, { offset: start, onEvent: handlers.onEvent });
         this.offsets.set(f, r.offset);
         this.cursorStore?.set(f, r.offset);
@@ -67,14 +103,16 @@ export class CodexAdapter implements AgentAdapter {
   }
 
   async watch(onEvent: (e: HarnessEvent) => void): Promise<() => Promise<void>> {
-    const watcher: FSWatcher = chokidar.watch(path.join(CODEX_SESSIONS_ROOT, '**', '*.jsonl'), {
+    // 注意:chokidar v4 对绝对路径 + glob 的 watch 不触发,必须监听根目录、
+    // 在处理器里按扩展名过滤
+    const watcher: FSWatcher = chokidar.watch(CODEX_SESSIONS_ROOT, {
       ignoreInitial: true,
       awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 },
     });
 
     let busy = false;
     const consume = async (filePath: string) => {
-      if (busy) return;
+      if (busy || !filePath.endsWith('.jsonl')) return;
       busy = true;
       try {
         const start = this.offsets.get(filePath) ?? 0;
@@ -113,6 +151,7 @@ export class CodexAdapter implements AgentAdapter {
       cwd: opts.cwd,
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, ...systemProxyEnv() },
     });
     const id = opts.taskId;
     let sessionId: string | null = opts.resumeSessionId ?? null;

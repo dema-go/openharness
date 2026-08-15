@@ -71,3 +71,12 @@
 - [x] 2.6 完全自主验证:dsh/claude 实跑;cursor 验证报错路径(未登录)
 - [x] 2.7 全量验证:typecheck/build/重启/浏览器截图/四 Agent 真实任务(dsh·claude 成功,codex 显性报错,cursor 可操作报错)
 - [x] 2.8 回标 user-question + CHANGELOG + README + commit + push
+
+## 第 3 轮:2026-08-15 用户反馈(#4 复测未修复 / #7 会话档案无数据 / #8 Codex 无法对话)
+
+- [x] 3.1 对话室滚动:复现真根因(tab 容器缺 flex,整页被撑爆 3041px),一行修复 + 长对话浏览器实测(零页面滚动/发送框固定/自动跟随)
+- [x] 3.2 会话档案:codex 事件 sessionId 散落修复 + 已消费文件跳过 + 一次性重建索引;cursor 接入 FTS body 全文轨迹
+- [x] 3.3 Codex CLI:系统代理自动注入(scutil --proxy)+ item.completed 新流格式解析;实测 12 秒完成回复正常
+- [x] 3.4 顺带修复:chokidar v4 绝对路径 glob 不触发 → 三个适配器 watcher 改根目录监听(合成文件实测实时索引)
+- [x] 3.5 全量验证:typecheck/build/重启/浏览器逐项核验/真实任务
+- [x] 3.6 回标 + CHANGELOG + README + commit + push

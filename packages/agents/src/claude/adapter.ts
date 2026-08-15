@@ -70,7 +70,9 @@ export class ClaudeAdapter implements AgentAdapter {
   }
 
   async watch(onEvent: (e: HarnessEvent) => void): Promise<() => Promise<void>> {
-    const watcher: FSWatcher = chokidar.watch(path.join(CLAUDE_SESSIONS_ROOT, '*.jsonl'), {
+    // 注意:chokidar v4 对绝对路径 + glob 的 watch 不触发,必须监听根目录、
+    // 在处理器里按扩展名过滤
+    const watcher: FSWatcher = chokidar.watch(CLAUDE_SESSIONS_ROOT, {
       ignoreInitial: true,
       depth: 1,
       awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 },
@@ -78,7 +80,7 @@ export class ClaudeAdapter implements AgentAdapter {
 
     let busy = false;
     const consume = async (filePath: string) => {
-      if (busy) return;
+      if (busy || !filePath.endsWith('.jsonl')) return;
       busy = true;
       try {
         const start = this.offsets.get(filePath) ?? 0;

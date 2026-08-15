@@ -117,6 +117,17 @@ async function main(): Promise<void> {
   await tasks.recover();
   conversations = new ConversationManager(store, tasks, (a) => adapters.get(a));
 
+  // ---- 一次性迁移:重建 codex/cursor 会话索引 ----
+  // codex:response_item 记录不含 session_id(payload.id 为条目 ID),旧解析器
+  // 导致消息事件散落/缺失、消费完的文件重启后把汇总覆盖为 0;
+  // cursor:search-db 新增 FTS body 全文轨迹。
+  if (!store.getMeta('reindex-v1.2')) {
+    console.log('[openharness] 迁移:重建 codex/cursor 会话索引…');
+    store.resetAgentIndex('codex', '%/.codex/sessions/%');
+    store.resetAgentIndex('cursor', 'cursor-conv:%');
+    store.setMeta('reindex-v1.2', String(Date.now()));
+  }
+
   // ---- 启动索引 + 实时监听 ----
   const stopWatches: Array<() => Promise<void>> = [];
   for (const adapter of adapters.values()) {

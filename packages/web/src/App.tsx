@@ -190,7 +190,8 @@ export function App(): React.JSX.Element {
               );
             })}
           </div>
-          <div className="min-h-0 flex-1">
+          {/* flex 容器必须加 flex:否则面板根节点(flex-1)无法被高度约束,长内容把整页撑爆 */}
+          <div className="flex min-h-0 flex-1">
             {tab === 'feed' ? (
               <ActivityFeed
                 liveEvents={events}

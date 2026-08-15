@@ -89,6 +89,23 @@ export function normalizeRecord(rec: Record<string, unknown>): HarnessEvent[] {
     }
     case 'compacted':
       return [{ ...base, kind: 'mode-change', summary: '上下文压缩(compacted)' }];
+    case 'item.completed': {
+      // codex CLI v0.144+ 的 --json 流格式:item.completed + item 内嵌(type/text/name)
+      const item = (rec.item ?? {}) as Record<string, unknown>;
+      const it = item.type;
+      if (it === 'agent_message') {
+        const text = String(item.text ?? '').trim();
+        return text ? [{ ...base, kind: 'assistant-message', summary: truncate(text), usage }] : [];
+      }
+      if (it === 'function_call' || it === 'custom_tool_call' || it === 'local_shell_call' || it === 'web_search_call') {
+        return [{ ...base, kind: 'tool-call', summary: `调用工具 ${String(item.name ?? it)}`, meta: { tool: item.name } }];
+      }
+      return [];
+    }
+    case 'item.started':
+    case 'turn.completed':
+      // 流式中间标记/usage 汇总:无时间线价值
+      return [];
     case 'error':
       return [{
         ...base,
@@ -147,6 +164,11 @@ export async function parseSessionFile(
     }
 
     for (const e of normalizeRecord(rec)) {
+      // 关键修复:response_item 等记录不含 session_id(payload.id 是条目 ID,
+      // 并非会话 ID),文件级必须一律覆盖为追踪到的会话 ID,否则消息事件
+      // 散落到各个条目 ID 下,会话档案时间线查不到轨迹
+      e.sessionId = sessionId || e.sessionId;
+      if (projectDir) e.projectDir = projectDir;
       if (e.kind === 'session-start' && turnModel) e.meta = { ...e.meta, model: turnModel };
       if (firstTs === 0 || e.ts < firstTs) firstTs = e.ts;
       if (e.ts > lastTs) lastTs = e.ts;

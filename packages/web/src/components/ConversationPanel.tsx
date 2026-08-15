@@ -279,8 +279,8 @@ export function ConversationPanel(props: {
         </div>
       </aside>
 
-      {/* 聊天区 */}
-      <section className="comic-card flex min-w-0 flex-1 flex-col overflow-hidden">
+      {/* 聊天区(min-h-0 防止长对话把整页撑高,保证内部滚动) */}
+      <section className="comic-card flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <div className="flex h-12 shrink-0 items-center gap-2 border-b-[3px] border-ink px-4">
           <h2 className="font-display text-[15px] text-ink">对话室</h2>
           {active && <span className="min-w-0 truncate font-mono text-[11px] text-faint">{active.title}</span>}
