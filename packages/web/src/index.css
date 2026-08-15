@@ -1,0 +1,132 @@
+@import "tailwindcss";
+
+/*
+ * OpenHarness 设计令牌 —— “任务控制舱”
+ * 石墨底色 + 暖纸白文字 + 琥珀/玉色信号灯;
+ * 大胆只花在一处:Agent 卡上的 LED 信号表。
+ */
+@theme {
+  --color-ink: #0f1216;
+  --color-panel: #161b21;
+  --color-panel2: #1d232c;
+  --color-line: #262e3a;
+  --color-paper: #e7e3d8;
+  --color-dim: #8a93a3;
+  --color-faint: #525b6b;
+  --color-amber: #e0a63c;
+  --color-jade: #7fb69b;
+  --color-brick: #c96a63;
+
+  --font-display: "Space Grotesk Variable", "PingFang SC", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-ink text-paper font-sans antialiased;
+    font-feature-settings: "tnum";
+  }
+  ::selection {
+    background: rgb(224 166 60 / 0.25);
+  }
+  :focus-visible {
+    outline: 1px solid var(--color-amber);
+    outline-offset: 2px;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-line);
+    border: 3px solid var(--color-ink);
+    border-radius: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+/* —— 签名元素:LED 信号灯 —— */
+@keyframes lamp-flash {
+  0% {
+    background: #fff2cf;
+    box-shadow: 0 0 10px 2px rgb(224 166 60 / 0.9);
+  }
+  100% {
+    background: var(--color-amber);
+    box-shadow: none;
+  }
+}
+.lamp-on {
+  animation: lamp-flash 1.1s ease-out forwards;
+}
+
+@keyframes orb-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(224 166 60 / 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgb(224 166 60 / 0);
+  }
+}
+.orb-running {
+  animation: orb-pulse 2.2s ease-in-out infinite;
+}
+
+@keyframes cursor-blink {
+  0%,
+  55% {
+    opacity: 1;
+  }
+  56%,
+  100% {
+    opacity: 0;
+  }
+}
+.cursor-blink {
+  animation: cursor-blink 1.4s steps(1) infinite;
+}
+
+@keyframes feed-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.feed-in {
+  animation: feed-in 0.28s ease-out;
+}
+
+@keyframes drawer-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+.drawer-in {
+  animation: drawer-in 0.22s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lamp-on,
+  .orb-running,
+  .cursor-blink,
+  .feed-in,
+  .drawer-in {
+    animation: none;
+  }
+}
