@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AGENT_DISPLAY, type AgentId } from '@openharness/core';
 import { api, type UsageReport } from '../lib/api';
 
@@ -15,13 +15,47 @@ function basename(p: string): string {
 
 export function UsagePanel(): React.JSX.Element {
   const [report, setReport] = useState<UsageReport | null>(null);
+  const [range, setRange] = useState<'7' | '14' | '30' | '90' | 'all' | 'custom'>('14');
+  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const [fromDate, setFromDate] = useState(() => {
+    const d = new Date(Date.now() - 30 * 86400_000);
+    return d.toISOString().slice(0, 10);
+  });
+  const [toDate, setToDate] = useState(today);
 
   useEffect(() => {
+    let alive = true;
+    const params: { days?: number; from?: number; to?: number } = {};
+    if (range === 'custom') {
+      if (fromDate) params.from = new Date(`${fromDate}T00:00:00`).getTime();
+      if (toDate) params.to = new Date(`${toDate}T23:59:59.999`).getTime();
+      if (!fromDate && !toDate) params.days = 30;
+    } else if (range !== 'all') {
+      params.days = Number(range);
+    }
+    setReport(null);
     api
-      .usage()
-      .then(setReport)
-      .catch(() => setReport(null));
-  }, []);
+      .usage(params)
+      .then((r) => {
+        if (alive) setReport(r);
+      })
+      .catch(() => {
+        if (alive) setReport(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [range, fromDate, toDate, today]);
+
+  const RANGES: Array<{ id: typeof range; label: string }> = [
+    { id: '7', label: '近 7 天' },
+    { id: '14', label: '近 14 天' },
+    { id: '30', label: '近 30 天' },
+    { id: '90', label: '近 90 天' },
+    { id: 'all', label: '全部' },
+    { id: 'custom', label: '自定义' },
+  ];
+  const rangeLabel = RANGES.find((r) => r.id === range)!.label;
 
   if (!report) {
     return (
@@ -38,6 +72,44 @@ export function UsagePanel(): React.JSX.Element {
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto p-4">
+      {/* 时间范围选择 */}
+      <div className="comic-card mb-4 flex flex-wrap items-center gap-2 p-3">
+        <span className="font-display text-[13px] text-ink">统计范围</span>
+        {RANGES.map((r) => (
+          <button
+            key={r.id}
+            type="button"
+            onClick={() => setRange(r.id)}
+            className={`rounded-md border-2 border-ink px-2.5 py-0.5 font-mono text-[11px] transition-colors ${
+              range === r.id ? 'bg-yellow text-ink' : 'bg-white text-dim hover:bg-panel2'
+            }`}
+            style={range === r.id ? { boxShadow: '2px 2px 0 #221D15' } : undefined}
+          >
+            {r.label}
+          </button>
+        ))}
+        {range === 'custom' && (
+          <span className="ml-1 flex items-center gap-1.5 font-mono text-[11px] text-dim">
+            <input
+              type="date"
+              value={fromDate}
+              max={toDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              className="comic-input w-auto py-0.5 text-[11px]"
+            />
+            ~
+            <input
+              type="date"
+              value={toDate}
+              min={fromDate}
+              max={today}
+              onChange={(e) => setToDate(e.target.value)}
+              className="comic-input w-auto py-0.5 text-[11px]"
+            />
+          </span>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatCard label="累计输入 tokens" value={fmtTokens(total.input)} color="#FF4433" />
         <StatCard label="累计输出 tokens" value={fmtTokens(total.output)} color="#3D8BFF" />
@@ -73,7 +145,9 @@ export function UsagePanel(): React.JSX.Element {
 
         {/* 按天 */}
         <section className="comic-card p-4">
-          <h3 className="font-display text-[14px] text-ink">近 14 天</h3>
+          <h3 className="font-display text-[14px] text-ink">
+            按天<span className="ml-2 font-mono text-[10.5px] text-faint">{rangeLabel}</span>
+          </h3>
           {byDay.length === 0 ? (
             <p className="mt-3 text-[12px] text-faint">暂无数据</p>
           ) : (

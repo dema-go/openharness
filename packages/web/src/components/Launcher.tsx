@@ -34,6 +34,13 @@ export function Launcher(props: {
   const [cwd, setCwd] = useState(projectDirs[0] ?? '');
   const [prompt, setPrompt] = useState('');
   const [queue, setQueue] = useState(false);
+  const [bypass, setBypass] = useState(() => {
+    try {
+      return localStorage.getItem('oh-bypass-permissions') === '1';
+    } catch {
+      return false;
+    }
+  });
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,7 +78,7 @@ export function Launcher(props: {
       void Notification.requestPermission();
     }
     try {
-      const t = await api.startTask({ agent, cwd: cwd.trim(), prompt: prompt.trim(), queue });
+      const t = await api.startTask({ agent, cwd: cwd.trim(), prompt: prompt.trim(), queue, bypassPermissions: bypass });
       props.onTask(t);
       setPrompt('');
     } catch (err) {
@@ -225,6 +232,29 @@ export function Launcher(props: {
               <span className="text-[12.5px] text-ink">
                 排队执行
                 <span className="ml-1.5 text-faint">特工忙时排进队伍,收工后自动接单</span>
+              </span>
+            </label>
+
+            <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border-[3px] border-red bg-red/10 px-3 py-2.5">
+              <input
+                type="checkbox"
+                checked={bypass}
+                onChange={(e) => {
+                  setBypass(e.target.checked);
+                  try {
+                    localStorage.setItem('oh-bypass-permissions', e.target.checked ? '1' : '0');
+                  } catch {
+                    /* 忽略 */
+                  }
+                }}
+                className="mt-0.5 h-4 w-4 accent-red"
+              />
+              <span className="text-[12.5px] leading-relaxed text-ink">
+                <span className="font-display text-red">完全自主(跳过所有确认)</span>
+                <span className="ml-1.5 text-dim">
+                  特工将直接执行全部命令与文件写入,不会询问,可能误删文件——仅用于可信目录。
+                  {agent === 'dsh' && ' DSH 不受此开关控制,权限取决于 ~/.dsh/settings.yaml(当前 defaultPreset=danger-full-access)。'}
+                </span>
               </span>
             </label>
 

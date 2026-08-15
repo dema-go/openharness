@@ -33,8 +33,11 @@ function basename(p: string | null): string {
   return parts[parts.length - 1] ?? p;
 }
 
-export function SessionsPanel(props: { sessions: SessionSummary[] }): React.JSX.Element {
-  const { sessions } = props;
+export function SessionsPanel(props: {
+  sessions: SessionSummary[];
+  onResume: (agent: AgentId, sessionId: string, cwd: string | null, title: string) => void;
+}): React.JSX.Element {
+  const { sessions, onResume } = props;
   const [agentFilter, setAgentFilter] = useState<AgentId | 'all'>('all');
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<SessionSummary | null>(null);
@@ -127,6 +130,7 @@ export function SessionsPanel(props: { sessions: SessionSummary[] }): React.JSX.
         <SessionDetail
           session={selected}
           onClose={() => setSelected(null)}
+          onResume={onResume}
           onCopy={async () => {
             try {
               await navigator.clipboard.writeText(selected.resumeCommand);
@@ -143,6 +147,7 @@ export function SessionsPanel(props: { sessions: SessionSummary[] }): React.JSX.
 function SessionDetail(props: {
   session: SessionSummary;
   onClose: () => void;
+  onResume: (agent: AgentId, sessionId: string, cwd: string | null, title: string) => void;
   onCopy: () => Promise<void>;
 }): React.JSX.Element {
   const { session } = props;
@@ -155,8 +160,8 @@ function SessionDetail(props: {
     let alive = true;
     api
       .events({ agent: session.agent, session: session.sessionId, limit: 100 })
-      .then((e) => {
-        if (alive) setEvents(e);
+      .then((page) => {
+        if (alive) setEvents(page.events);
       })
       .catch(() => {
         if (alive) setEvents([]);
@@ -234,7 +239,7 @@ function SessionDetail(props: {
 
         <div className="shrink-0 border-t-[3px] border-ink px-5 py-4">
           <p className="mb-2 font-display text-[12px] text-dim">在原工具里继续这段会话:</p>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <code className="min-w-0 flex-1 truncate rounded-lg border-[3px] border-ink bg-white px-3 py-2 font-mono text-[12px] text-ink">
               {session.resumeCommand}
             </code>
@@ -266,6 +271,14 @@ function SessionDetail(props: {
               className="comic-btn shrink-0 bg-cyan px-3 py-2 font-display text-[12px] text-white disabled:opacity-40"
             >
               {openError ? '打开失败' : opening ? '打开中…' : '在终端打开'}
+            </button>
+            <button
+              type="button"
+              onClick={() => props.onResume(session.agent, session.sessionId, session.projectDir, session.title)}
+              className="comic-btn shrink-0 bg-red px-3 py-2 font-display text-[12px] text-white"
+              title="在对话室新建对话并接续这段原生会话,之后可随时切换特工"
+            >
+              对话室续聊
             </button>
           </div>
         </div>

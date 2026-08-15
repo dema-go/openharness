@@ -11,6 +11,8 @@ import type { AgentAdapter, AgentId, AgentStatus, HarnessEvent } from '@openharn
 import { AGENT_DISPLAY, AGENT_IDS } from '@openharness/core';
 import { ClaudeAdapter, CodexAdapter, DshAdapter, CursorAdapter } from '@openharness/agents';
 import { broadcast, onMessage } from './bus.js';
+import { ConversationManager } from './conversations.js';
+import { PresetStore } from './presets.js';
 import { createApp } from './routes.js';
 import { Store } from './store.js';
 import { TaskManager } from './tasks.js';
@@ -22,21 +24,30 @@ const DB_PATH = process.env.OPENHARNESS_DB ?? path.join(os.homedir(), '.openharn
 async function main(): Promise<void> {
   const store = new Store(DB_PATH);
 
-  // 事件流水线:所有归一化事件 → 入库 → 广播
+  // 事件流水线:所有归一化事件 → 入库 → 广播 → 对话室回填
   // 同时维护 session → model 映射,用量统计按模型归属
   const modelBySession = new Map<string, string>();
+  let conversations: ConversationManager | undefined;
   const pipeline = (e: HarnessEvent): void => {
     const key = `${e.agent}:${e.sessionId}`;
     if (typeof e.meta?.model === 'string') {
       modelBySession.set(key, e.meta.model as string);
     }
     const model = modelBySession.get(key);
+    let seq: number | undefined;
     try {
-      store.insertEvent(model ? { ...e, model } : e);
+      seq = store.insertEvent(model ? { ...e, model } : e);
     } catch (err) {
       console.error('[pipeline] 入库失败:', err);
     }
-    broadcast({ type: 'event', data: e });
+    // 对话室消息回填(带 taskId 的发射路径事件)
+    try {
+      conversations?.handleEvent(e);
+    } catch (err) {
+      console.error('[pipeline] 对话回填失败:', err);
+    }
+    // 广播时带上入库序号:前端历史分页与实时流共用同一游标,按 seq 去重
+    broadcast({ type: 'event', data: { ...e, seq } });
   };
 
   // 适配器注册表(四个工具全部接入)
@@ -104,6 +115,7 @@ async function main(): Promise<void> {
 
   const tasks = new TaskManager(pipeline, store, notifyEnabled);
   await tasks.recover();
+  conversations = new ConversationManager(store, tasks, (a) => adapters.get(a));
 
   // ---- 启动索引 + 实时监听 ----
   const stopWatches: Array<() => Promise<void>> = [];
@@ -136,6 +148,8 @@ async function main(): Promise<void> {
   const { app, nodeWs } = createApp({
     store,
     tasks,
+    presets: new PresetStore(),
+    conversations,
     getAdapter: (a) => adapters.get(a),
     getStatuses: () => statuses,
     enabledAgents,

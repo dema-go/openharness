@@ -2,6 +2,7 @@ import type {
   AgentConfigInfo,
   AgentId,
   AgentStatus,
+  ConfigFieldDef,
   HarnessEvent,
   LaunchOptions,
   SessionSummary,
@@ -54,6 +55,18 @@ export interface AgentAdapter {
 
   /** 只读配置摘要(结构化 + 密钥脱敏,绝不返回配置原文)。 */
   describeConfig(): Promise<AgentConfigInfo>;
+
+  /** 可编辑配置字段 schema(当前值已按 secret 规则脱敏)。 */
+  configSchema(): Promise<ConfigFieldDef[]>;
+
+  /**
+   * 写入配置:key → 新值。secret 字段仅当用户提交了新值才会出现;
+   * 返回实际写入的字段 key 列表。实现负责保留配置文件中的其他内容。
+   */
+  updateConfig(values: Record<string, string>): Promise<{ applied: string[] }>;
+
+  /** 读取 schema 字段的当前明文值(仅供服务端做预设快照,绝不返回给前端)。 */
+  getConfigValues(): Promise<Record<string, string>>;
 
   /** 汇总为 AgentStatus(由 server 填充 activeTasks / queuedTasks / sessionsCount)。 */
   describeStatus(extra: Pick<AgentStatus, 'activeTasks' | 'queuedTasks' | 'sessionsCount'>): AgentStatus;

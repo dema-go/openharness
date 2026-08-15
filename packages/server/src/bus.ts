@@ -2,12 +2,13 @@
  * 事件总线:索引流水线与 WebSocket 广播之间的枢纽。
  */
 import { EventEmitter } from 'node:events';
-import type { AgentStatus, HarnessEvent, TaskInfo } from '@openharness/core';
+import type { AgentStatus, ConversationMessage, HarnessEvent, TaskInfo } from '@openharness/core';
 
 export type BusMessage =
   | { type: 'event'; data: HarnessEvent }
   | { type: 'status'; data: AgentStatus[] }
-  | { type: 'task'; data: TaskInfo };
+  | { type: 'task'; data: TaskInfo }
+  | { type: 'conversation'; data: { convId: string; message: ConversationMessage } };
 
 const emitter = new EventEmitter();
 export const bus = emitter;

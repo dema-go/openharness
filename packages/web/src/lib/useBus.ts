@@ -3,17 +3,18 @@
  * 消息按类型分发给回调;断线状态通过 connected 暴露。
  */
 import { useEffect, useRef, useState } from 'react';
-import type { AgentStatus, HarnessEvent, TaskInfo } from '@openharness/core';
+import type { AgentStatus, ConversationMessage, HarnessEvent, TaskInfo } from '@openharness/core';
 
 export interface BusMessage {
-  type: 'event' | 'status' | 'task';
-  data: HarnessEvent | AgentStatus[] | TaskInfo;
+  type: 'event' | 'status' | 'task' | 'conversation';
+  data: HarnessEvent | AgentStatus[] | TaskInfo | { convId: string; message: ConversationMessage };
 }
 
 export function useBus(handlers: {
   onEvent: (e: HarnessEvent) => void;
   onStatus: (s: AgentStatus[]) => void;
   onTask: (t: TaskInfo) => void;
+  onConversation: (d: { convId: string; message: ConversationMessage }) => void;
 }): boolean {
   const [connected, setConnected] = useState(false);
   const handlersRef = useRef(handlers);
@@ -35,6 +36,10 @@ export function useBus(handlers: {
           if (msg.type === 'event') h.onEvent(msg.data as HarnessEvent);
           else if (msg.type === 'status') h.onStatus(msg.data as AgentStatus[]);
           else if (msg.type === 'task') h.onTask(msg.data as TaskInfo);
+          else if (msg.type === 'conversation') {
+            const d = msg.data as { convId: string; message: ConversationMessage };
+            if (d.convId) h.onConversation(d);
+          }
         } catch {
           /* 忽略坏消息 */
         }

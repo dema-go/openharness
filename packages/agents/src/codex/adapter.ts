@@ -15,6 +15,7 @@ import {
   type AgentAdapter,
   type AgentConfigInfo,
   type AgentStatus,
+  type ConfigFieldDef,
   type CursorStore,
   type HarnessEvent,
   type IndexHandlers,
@@ -23,7 +24,7 @@ import {
   type TaskHandle,
   truncate,
 } from '@openharness/core';
-import { entry, parseTomlSections } from '../config-utils.js';
+import { entry, parseTomlSections, patchToml } from '../config-utils.js';
 import { listSessionFiles, normalizeRecord, parseSessionFile, type ParseResult } from './session-file.js';
 
 export const CODEX_SESSIONS_ROOT = path.join(os.homedir(), '.codex', 'sessions');
@@ -95,13 +96,26 @@ export class CodexAdapter implements AgentAdapter {
   }
 
   async launch(opts: LaunchOptions, onEvent: (e: HarnessEvent) => void): Promise<TaskHandle> {
-    const child = spawn('codex', ['exec', '--json', ...(opts.model ? ['-m', opts.model] : []), opts.prompt], {
+    const autonomy = opts.bypassPermissions ? ['--dangerously-bypass-approvals-and-sandbox'] : [];
+    // 续接模式:`codex exec resume <sessionId> --json <prompt>`(--json 已验证可用)
+    const args = opts.resumeSessionId
+      ? [
+          'exec',
+          'resume',
+          opts.resumeSessionId,
+          '--json',
+          ...autonomy,
+          ...(opts.model ? ['-c', `model=${opts.model}`] : []),
+          opts.prompt,
+        ]
+      : ['exec', '--json', ...autonomy, ...(opts.model ? ['-m', opts.model] : []), opts.prompt];
+    const child = spawn('codex', args, {
       cwd: opts.cwd,
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     const id = opts.taskId;
-    let sessionId: string | null = null;
+    let sessionId: string | null = opts.resumeSessionId ?? null;
     let settled = false;
     let errTail = '';
 
@@ -115,14 +129,14 @@ export class CodexAdapter implements AgentAdapter {
         sessionId: sessionId ?? id,
         kind: 'task-end',
         summary: state === 'done' ? '任务完成' : `任务异常退出${errTail ? ':' + truncate(errTail, 160) : ''}`,
-        meta: { taskId: id, exitCode, state },
+        meta: { taskId: id, conversationId: opts.conversationId, exitCode, state },
       });
     };
 
     child.on('error', (err) => {
       onEvent({
         ts: Date.now(), agent: 'codex', projectDir: opts.cwd, sessionId: sessionId ?? id,
-        kind: 'error', summary: `启动失败:${err.message}`, meta: { taskId: id },
+        kind: 'error', summary: `启动失败:${err.message}`, meta: { taskId: id, conversationId: opts.conversationId },
       });
       settle(null, 'error');
     });
@@ -141,6 +155,9 @@ export class CodexAdapter implements AgentAdapter {
       if (rec.type === 'session_meta' && payload.session_id) {
         sessionId = payload.session_id as string;
       }
+      if (rec.type === 'thread.started' && typeof rec.thread_id === 'string' && !sessionId) {
+        sessionId = rec.thread_id as string;
+      }
       if (rec.type === 'turn_context' && typeof payload.model === 'string') {
         turnModel = payload.model as string;
       }
@@ -149,7 +166,7 @@ export class CodexAdapter implements AgentAdapter {
         onEvent({
           ...e,
           sessionId: sessionId ?? e.sessionId,
-          meta: { ...e.meta, taskId: id, ...(turnModel ? { model: turnModel } : {}) },
+          meta: { ...e.meta, taskId: id, conversationId: opts.conversationId, ...(turnModel ? { model: turnModel } : {}) },
         });
       }
     });
@@ -261,6 +278,54 @@ export class CodexAdapter implements AgentAdapter {
       notes.push('未找到 ~/.codex/config.toml');
     }
     return { agent: this.agentId, sections, notes };
+  }
+
+  // ---- 配置编辑(config.toml 逐行补丁,其余内容保留) ----
+
+  private readonly configPath = path.join(os.homedir(), '.codex', 'config.toml');
+
+  private async readToml(): Promise<string> {
+    try {
+      return await fs.readFile(this.configPath, 'utf8');
+    } catch {
+      return '';
+    }
+  }
+
+  async configSchema(): Promise<ConfigFieldDef[]> {
+    const root = parseTomlSections(await this.readToml()).get('') ?? new Map<string, string>();
+    const get = (k: string): string => root.get(k) ?? '';
+    const mk = (key: string, label: string, opts?: Partial<ConfigFieldDef>): ConfigFieldDef => ({
+      key,
+      label,
+      type: 'string',
+      group: '模型与沙箱',
+      value: get(key),
+      ...opts,
+    });
+    return [
+      mk('model', '模型', { hint: '如 gpt-5.6-sol' }),
+      mk('model_provider', '模型供应商', { hint: 'config.toml 中 [model_providers.<id>] 定义的 id' }),
+      mk('model_reasoning_effort', '推理强度', { options: ['minimal', 'low', 'medium', 'high', 'xhigh'], type: 'select' }),
+      mk('sandbox_mode', '沙箱模式', { options: ['read-only', 'workspace-write', 'danger-full-access'], type: 'select' }),
+      mk('approval_policy', '审批策略', { options: ['untrusted', 'on-failure', 'on-request', 'never'], type: 'select' }),
+    ];
+  }
+
+  async getConfigValues(): Promise<Record<string, string>> {
+    const root = parseTomlSections(await this.readToml()).get('') ?? new Map<string, string>();
+    const out: Record<string, string> = {};
+    for (const f of await this.configSchema()) out[f.key] = root.get(f.key) ?? '';
+    return out;
+  }
+
+  async updateConfig(values: Record<string, string>): Promise<{ applied: string[] }> {
+    const content = await this.readToml();
+    const updates = Object.entries(values).map(([key, value]) => ({ section: null, key, value }));
+    const next = patchToml(content, updates);
+    await fs.mkdir(path.dirname(this.configPath), { recursive: true });
+    await fs.writeFile(this.configPath, next, 'utf8');
+    return { applied: Object.keys(values) };
   }
 
   describeStatus(extra: Pick<AgentStatus, 'activeTasks' | 'queuedTasks' | 'sessionsCount'>): AgentStatus {

@@ -17,6 +17,7 @@ import {
   type AgentConfigEntry,
   type AgentConfigInfo,
   type AgentStatus,
+  type ConfigFieldDef,
   type CursorStore,
   type HarnessEvent,
   type IndexHandlers,
@@ -177,7 +178,16 @@ export class CursorAdapter implements AgentAdapter {
     const [bin, prefix] = await this.resolveBinary();
     const child = spawn(
       bin,
-      [...prefix, '--print', '--output-format', 'stream-json', ...(opts.model ? ['--model', opts.model] : []), opts.prompt],
+      [
+        ...prefix,
+        '--print',
+        '--output-format',
+        'stream-json',
+        ...(opts.resumeSessionId ? ['--resume', opts.resumeSessionId] : []),
+        ...(opts.bypassPermissions ? ['--yolo', '--sandbox', 'disabled', '--approve-mcps'] : []),
+        ...(opts.model ? ['--model', opts.model] : []),
+        opts.prompt,
+      ],
       { cwd: opts.cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'] },
     );
     const id = opts.taskId;
@@ -192,14 +202,14 @@ export class CursorAdapter implements AgentAdapter {
         ts: Date.now(), agent: 'cursor', projectDir: opts.cwd, sessionId: sessionId ?? id,
         kind: 'task-end',
         summary: state === 'done' ? '任务完成' : `任务异常退出${errTail ? ':' + truncate(errTail, 160) : ''}`,
-        meta: { taskId: id, exitCode, state },
+        meta: { taskId: id, conversationId: opts.conversationId, exitCode, state },
       });
     };
 
     child.on('error', (err) => {
       onEvent({
         ts: Date.now(), agent: 'cursor', projectDir: opts.cwd, sessionId: sessionId ?? id,
-        kind: 'error', summary: `启动失败:${err.message}`, meta: { taskId: id },
+        kind: 'error', summary: `启动失败:${err.message}`, meta: { taskId: id, conversationId: opts.conversationId },
       });
       settle(null, 'error');
     });
@@ -219,7 +229,7 @@ export class CursorAdapter implements AgentAdapter {
       if (rec.type === 'result' && rec.session_id) sessionId = rec.session_id as string;
       for (const e of normalizeStreamRecord(rec)) {
         if (e.kind === 'user-message') continue; // 回显略过
-        onEvent({ ...e, sessionId: sessionId ?? e.sessionId, meta: { ...e.meta, taskId: id } });
+        onEvent({ ...e, sessionId: sessionId ?? e.sessionId, meta: { ...e.meta, taskId: id, conversationId: opts.conversationId } });
       }
     });
     child.stderr?.on('data', (chunk: Buffer) => {
@@ -279,7 +289,22 @@ export class CursorAdapter implements AgentAdapter {
 
     notes.push('CLI 登录态与 IDE 不共享:控制台发任务前需执行一次 `cursor-agent login`');
     notes.push('会话索引来自 ~/Library/Application Support/Cursor/User/globalStorage/conversation-search.db(只读)');
+    notes.push('Cursor 凭据走 OAuth 登录(钥匙串),不落配置文件;修改 api key / baseUrl 请用 `cursor-agent login` 或 Cursor IDE 设置');
     return { agent: this.agentId, sections, notes };
+  }
+
+  // ---- 配置编辑:Cursor 无配置文件可改,提供空 schema ----
+
+  async configSchema(): Promise<ConfigFieldDef[]> {
+    return [];
+  }
+
+  async getConfigValues(): Promise<Record<string, string>> {
+    return {};
+  }
+
+  async updateConfig(_values: Record<string, string>): Promise<{ applied: string[] }> {
+    throw new Error('Cursor 凭据走 OAuth 登录,请用 `cursor-agent login` 修改');
   }
 
   describeStatus(extra: Pick<AgentStatus, 'activeTasks' | 'queuedTasks' | 'sessionsCount'>): AgentStatus {

@@ -1,9 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { AgentId, AgentStatus, HarnessEvent, SessionSummary, TaskInfo } from '@openharness/core';
+import type {
+  AgentId,
+  AgentStatus,
+  ConversationMessage,
+  HarnessEvent,
+  SessionSummary,
+  TaskInfo,
+} from '@openharness/core';
 import { AGENT_DISPLAY } from '@openharness/core';
 import { ActivityFeed } from './components/ActivityFeed';
 import { AgentCard } from './components/AgentCard';
 import { ConfigPanel } from './components/ConfigPanel';
+import { ConversationPanel } from './components/ConversationPanel';
 import { Launcher } from './components/Launcher';
 import { SessionsPanel } from './components/SessionsPanel';
 import { TopBar } from './components/TopBar';
@@ -12,9 +20,11 @@ import { api } from './lib/api';
 import { useBus } from './lib/useBus';
 
 const MAX_EVENTS = 500;
+const MAX_CONV_LIVE = 300;
 const ORDER: AgentId[] = ['claude', 'cursor', 'codex', 'dsh'];
 const TABS = [
   { id: 'feed', label: '实时活动流' },
+  { id: 'conversations', label: '对话室' },
   { id: 'sessions', label: '会话档案' },
   { id: 'usage', label: '用量账本' },
   { id: 'config', label: '配置速览' },
@@ -26,10 +36,11 @@ export function App(): React.JSX.Element {
   const [tasks, setTasks] = useState<TaskInfo[]>([]);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [projectDirs, setProjectDirs] = useState<string[]>([]);
-  const [filter, setFilter] = useState<AgentId | 'all'>('all');
   const [paused, setPaused] = useState(false);
   const [launcherOpen, setLauncherOpen] = useState(false);
-  const [tab, setTab] = useState<'feed' | 'sessions' | 'usage' | 'config'>('feed');
+  const [tab, setTab] = useState<'feed' | 'conversations' | 'sessions' | 'usage' | 'config'>('feed');
+  const [convLive, setConvLive] = useState<Array<{ convId: string; message: ConversationMessage }>>([]);
+  const [pendingConvId, setPendingConvId] = useState<string | null>(null);
   const [clock, setClock] = useState('');
   const pulses = useRef<Record<string, number>>({});
 
@@ -44,10 +55,9 @@ export function App(): React.JSX.Element {
       .catch(() => undefined);
   }, []);
 
-  // 初始数据
+  // 初始数据(活动流历史由 ActivityFeed 自行分页拉取,这里只接实时流)
   useEffect(() => {
     void api.agents().then(setStatuses).catch(() => undefined);
-    void api.events({ limit: 100 }).then(setEvents).catch(() => undefined);
     void api.tasks().then(setTasks).catch(() => undefined);
     refreshSessions();
   }, [refreshSessions]);
@@ -90,7 +100,34 @@ export function App(): React.JSX.Element {
   }, [refreshSessions]);
 
   const onStatus = useCallback((s: AgentStatus[]) => setStatuses(s), []);
-  const connected = useBus({ onEvent, onStatus, onTask });
+
+  const onConversation = useCallback((d: { convId: string; message: ConversationMessage }) => {
+    setConvLive((prev) => {
+      const next = [...prev, d];
+      return next.length > MAX_CONV_LIVE ? next.slice(next.length - MAX_CONV_LIVE) : next;
+    });
+  }, []);
+
+  const connected = useBus({ onEvent, onStatus, onTask, onConversation });
+
+  /** 会话档案「对话室续聊」:创建/绑定对话并跳转 */
+  const resumeInConversation = useCallback(
+    async (agent: AgentId, sessionId: string, cwd: string | null, title: string) => {
+      try {
+        const conv = await api.createConversation({
+          title: `续聊:${title.slice(0, 30)}`,
+          agent,
+          sessionId,
+          cwd: cwd ?? undefined,
+        });
+        setPendingConvId(conv.id);
+        setTab('conversations');
+      } catch {
+        setPendingConvId(null);
+      }
+    },
+    [],
+  );
 
   const runningCount = tasks.filter((t) => t.state === 'running').length;
   const sorted = [...statuses].sort((a, b) => ORDER.indexOf(a.agent) - ORDER.indexOf(b.agent));
@@ -156,14 +193,20 @@ export function App(): React.JSX.Element {
           <div className="min-h-0 flex-1">
             {tab === 'feed' ? (
               <ActivityFeed
-                events={events}
-                filter={filter}
-                onFilter={setFilter}
+                liveEvents={events}
                 paused={paused}
                 onTogglePause={() => setPaused((p) => !p)}
               />
+            ) : tab === 'conversations' ? (
+              <ConversationPanel
+                liveMessages={convLive}
+                projectDirs={projectDirs}
+                tasks={tasks}
+                initialConvId={pendingConvId}
+                onTask={onTask}
+              />
             ) : tab === 'sessions' ? (
-              <SessionsPanel sessions={sessions} />
+              <SessionsPanel sessions={sessions} onResume={resumeInConversation} />
             ) : tab === 'usage' ? (
               <UsagePanel />
             ) : (

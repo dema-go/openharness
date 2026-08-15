@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
-import type { AgentId, HarnessEvent } from '@openharness/core';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { AgentId, EventKind, HarnessEvent } from '@openharness/core';
 import { AGENT_DISPLAY, EVENT_KIND_LABEL } from '@openharness/core';
+import { api } from '../lib/api';
 import { AGENT_CHARACTER } from './ComicIcons';
 
 const KIND_STICKER: Record<HarnessEvent['kind'], string> = {
@@ -15,6 +16,9 @@ const KIND_STICKER: Record<HarnessEvent['kind'], string> = {
   'task-start': 'bg-red text-white',
   'task-end': 'bg-green text-white',
 };
+
+const PAGE_SIZES = [50, 100, 200];
+const ALL_KINDS = Object.keys(EVENT_KIND_LABEL) as EventKind[];
 
 function fmtTime(ts: number): string {
   return new Intl.DateTimeFormat('zh-CN', {
@@ -31,21 +35,98 @@ function basename(p: string | null): string {
   return parts[parts.length - 1] ?? p;
 }
 
+function matchEvent(
+  e: HarnessEvent,
+  filter: AgentId | 'all',
+  kinds: EventKind[],
+  q: string,
+): boolean {
+  if (filter !== 'all' && e.agent !== filter) return false;
+  if (kinds.length > 0 && !kinds.includes(e.kind)) return false;
+  if (q && !e.summary.toLowerCase().includes(q)) return false;
+  return true;
+}
+
 export function ActivityFeed(props: {
-  events: HarnessEvent[];
-  filter: AgentId | 'all';
-  onFilter: (f: AgentId | 'all') => void;
+  liveEvents: HarnessEvent[];
   paused: boolean;
   onTogglePause: () => void;
 }): React.JSX.Element {
-  const { events, filter, onFilter, paused, onTogglePause } = props;
+  const { liveEvents, paused, onTogglePause } = props;
   const scroller = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
+
+  // 服务端分页历史(时间正序);实时事件由父级 WS 累积后传入
+  const [history, setHistory] = useState<HarnessEvent[]>([]);
+  const [hasMore, setHasMore] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [filter, setFilter] = useState<AgentId | 'all'>('all');
+  const [kinds, setKinds] = useState<EventKind[]>([]);
+  const [query, setQuery] = useState('');
+  const [pageSize, setPageSize] = useState(100);
+
+  // 加载更早时记录滚动位置,prepend 后保持视口不动
+  const pendingRestore = useRef<{ height: number; top: number } | null>(null);
+
+  const fetchPage = useCallback(
+    async (beforeSeq: number | undefined, reset: boolean) => {
+      try {
+        const page = await api.events({
+          agent: filter === 'all' ? undefined : filter,
+          kinds: kinds.length > 0 ? kinds : undefined,
+          q: query.trim() || undefined,
+          limit: pageSize,
+          beforeSeq,
+        });
+        setHasMore(page.hasMore);
+        setHistory((prev) => {
+          if (reset) return page.events;
+          const seen = new Set(prev.map((e) => e.seq));
+          return [...page.events.filter((e) => !seen.has(e.seq)), ...prev];
+        });
+      } catch {
+        setHasMore(false);
+      } finally {
+        setLoading(false);
+        setLoadingOlder(false);
+      }
+    },
+    [filter, kinds, query, pageSize],
+  );
+
+  // 筛选 / 每页条数变化:重置为最新一页
+  useEffect(() => {
+    setLoading(true);
+    void fetchPage(undefined, true);
+  }, [fetchPage]);
+
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    const pending = pendingRestore.current;
+    if (el && pending) {
+      el.scrollTop = el.scrollHeight - pending.height + pending.top;
+      pendingRestore.current = null;
+    }
+  }, [history]);
+
+  const loadOlder = () => {
+    if (loadingOlder || loading || !hasMore) return;
+    const el = scroller.current;
+    pendingRestore.current = el
+      ? { height: el.scrollHeight, top: el.scrollTop }
+      : { height: 0, top: 0 };
+    setLoadingOlder(true);
+    const oldest = history.length
+      ? Math.min(...history.map((e) => e.seq ?? Number.MAX_SAFE_INTEGER))
+      : undefined;
+    void fetchPage(oldest === Number.MAX_SAFE_INTEGER ? undefined : oldest, false);
+  };
 
   useEffect(() => {
     const el = scroller.current;
     if (el && atBottom && !paused) el.scrollTop = el.scrollHeight;
-  }, [events, atBottom, paused]);
+  }, [liveEvents.length, history.length, atBottom, paused]);
 
   const handleScroll = () => {
     const el = scroller.current;
@@ -53,45 +134,125 @@ export function ActivityFeed(props: {
     setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 48);
   };
 
-  const visible = filter === 'all' ? events : events.filter((e) => e.agent === filter);
+  const visible = useMemo(() => {
+    const seen = new Set(history.map((e) => e.seq));
+    const extra = liveEvents.filter((e) => e.seq === undefined || !seen.has(e.seq));
+    return [...history, ...extra].filter((e) => matchEvent(e, filter, kinds, query.trim().toLowerCase()));
+  }, [history, liveEvents, filter, kinds, query]);
+
+  const toggleKind = (k: EventKind) => {
+    setKinds((prev) => (prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]));
+  };
+
+  const filtering = kinds.length > 0 || query.trim() !== '' || filter !== 'all';
 
   return (
     <div className="flex min-h-0 flex-1 flex-col p-4">
       <div className="comic-card flex min-h-0 flex-1 flex-col overflow-hidden">
         {/* 面板头:标签页 + 过滤贴纸 */}
-        <div className="flex h-12 shrink-0 items-center gap-2 border-b-[3px] border-ink px-4">
-          <h2 className="font-display text-[15px] text-ink">实时活动流</h2>
-          <span className="sticker rotate-2 bg-red text-white">LIVE</span>
-          <span className="font-mono text-[11px] text-faint tabular-nums">{visible.length}</span>
-          <div className="ml-3 flex items-center gap-1.5">
-            {(['all', 'claude', 'cursor', 'codex', 'dsh'] as const).map((f) => (
-              <button
-                key={f}
-                type="button"
-                onClick={() => onFilter(f)}
-                className={`rounded-md border-2 border-ink px-2 py-0.5 font-mono text-[11px] transition-colors ${
-                  filter === f ? 'bg-yellow text-ink' : 'bg-white text-dim hover:bg-panel2'
-                }`}
-                style={filter === f ? { boxShadow: '2px 2px 0 #221D15' } : undefined}
+        <div className="shrink-0 border-b-[3px] border-ink px-4 py-2">
+          <div className="flex items-center gap-2">
+            <h2 className="font-display text-[15px] text-ink">实时活动流</h2>
+            <span className="sticker rotate-2 bg-red text-white">LIVE</span>
+            <span className="font-mono text-[11px] text-faint tabular-nums">
+              {loading ? '…' : `已加载 ${visible.length} 条`}
+            </span>
+            <div className="ml-3 flex items-center gap-1.5">
+              {(['all', 'claude', 'cursor', 'codex', 'dsh'] as const).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => setFilter(f)}
+                  className={`rounded-md border-2 border-ink px-2 py-0.5 font-mono text-[11px] transition-colors ${
+                    filter === f ? 'bg-yellow text-ink' : 'bg-white text-dim hover:bg-panel2'
+                  }`}
+                  style={filter === f ? { boxShadow: '2px 2px 0 #221D15' } : undefined}
+                >
+                  {f === 'all' ? '全部' : f}
+                </button>
+              ))}
+            </div>
+            <div className="ml-auto flex items-center gap-3">
+              {!atBottom && !paused && <span className="font-mono text-[11px] text-red">有新活动 ↓</span>}
+              <select
+                value={pageSize}
+                onChange={(e) => setPageSize(Number(e.target.value))}
+                className="comic-input w-auto py-0.5 font-mono text-[11px]"
+                title="每页条数"
               >
-                {f === 'all' ? '全部' : f}
+                {PAGE_SIZES.map((n) => (
+                  <option key={n} value={n}>
+                    每页 {n} 条
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={onTogglePause}
+                className={`font-mono text-[11px] ${paused ? 'text-red' : 'text-faint hover:text-dim'}`}
+              >
+                {paused ? '已暂停' : '自动跟随'}
               </button>
-            ))}
+            </div>
           </div>
-          <div className="ml-auto flex items-center gap-3">
-            {!atBottom && !paused && <span className="font-mono text-[11px] text-red">有新活动 ↓</span>}
-            <button
-              type="button"
-              onClick={onTogglePause}
-              className={`font-mono text-[11px] ${paused ? 'text-red' : 'text-faint hover:text-dim'}`}
-            >
-              {paused ? '已暂停' : '自动跟随'}
-            </button>
+
+          {/* 筛选行:事件类型 + 关键词 */}
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            {ALL_KINDS.map((k) => {
+              const on = kinds.includes(k);
+              return (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => toggleKind(k)}
+                  className={`rounded-md border-2 border-ink px-1.5 py-0.5 font-mono text-[10.5px] transition-colors ${
+                    on ? KIND_STICKER[k] : 'bg-white text-dim hover:bg-panel2'
+                  }`}
+                  style={on ? { boxShadow: '1.5px 1.5px 0 #221D15' } : undefined}
+                >
+                  {EVENT_KIND_LABEL[k]}
+                </button>
+              );
+            })}
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="搜关键词…"
+              className="comic-input ml-auto w-52 py-0.5 text-[11px]"
+            />
+            {filtering && (
+              <button
+                type="button"
+                onClick={() => {
+                  setFilter('all');
+                  setKinds([]);
+                  setQuery('');
+                }}
+                className="font-mono text-[10.5px] text-red hover:underline"
+              >
+                清除筛选
+              </button>
+            )}
           </div>
         </div>
 
+        {hasMore && (
+          <button
+            type="button"
+            onClick={loadOlder}
+            disabled={loadingOlder}
+            className="shrink-0 border-b-2 border-dashed border-faint/50 bg-panel2/50 px-4 py-1.5 text-center font-mono text-[11px] text-dim transition-colors hover:bg-panel2 hover:text-ink disabled:opacity-40"
+          >
+            {loadingOlder ? '翻旧账中…' : '▲ 加载更早'}
+          </button>
+        )}
+
         <div ref={scroller} onScroll={handleScroll} className="min-h-0 flex-1 overflow-y-auto">
-          {visible.length === 0 ? (
+          {loading ? (
+            <div className="flex h-full items-center justify-center">
+              <p className="font-mono text-[12px] text-faint">翻活动流中…</p>
+            </div>
+          ) : visible.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-4 px-8 text-center">
               <svg viewBox="0 0 100 100" width="72" height="72" aria-hidden>
                 <circle cx="50" cy="50" r="46" fill="#fff" stroke="#221D15" strokeWidth="5" />
@@ -101,13 +262,13 @@ export function ActivityFeed(props: {
                 <path d="M14 22 L4 12 M86 22 L96 12" stroke="#221D15" strokeWidth="4" strokeLinecap="round" />
               </svg>
               <div className="bubble font-display text-[13px] text-ink">
-                这里还空空的哦!发个任务,或去任意工具里开一局~
+                {filtering ? '没有匹配的消息,换个筛选试试~' : '这里还空空的哦!发个任务,或去任意工具里开一局~'}
               </div>
             </div>
           ) : (
             <ul className="py-3">
               {visible.map((e, i) => (
-                <li key={i} className="feed-in flex items-start gap-3 px-4 py-2">
+                <li key={e.seq ?? `live-${i}`} className="feed-in flex items-start gap-3 px-4 py-2">
                   <span
                     className={`sticker mt-0.5 w-[74px] shrink-0 -rotate-2 justify-center ${KIND_STICKER[e.kind]}`}
                   >

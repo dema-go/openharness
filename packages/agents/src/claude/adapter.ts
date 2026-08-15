@@ -14,12 +14,15 @@ import {
   type AgentAdapter,
   type AgentConfigInfo,
   type AgentStatus,
+  type ConfigFieldDef,
   type CursorStore,
   type HarnessEvent,
   type IndexHandlers,
   type LaunchOptions,
   type SessionSummary,
   type TaskHandle,
+  isSecretKey,
+  maskSecret,
   truncate,
 } from '@openharness/core';
 import { flattenSection } from '../config-utils.js';
@@ -99,7 +102,16 @@ export class ClaudeAdapter implements AgentAdapter {
   async launch(opts: LaunchOptions, onEvent: (e: HarnessEvent) => void): Promise<TaskHandle> {
     const child = spawn(
       'claude',
-      ['-p', opts.prompt, '--output-format', 'stream-json', '--verbose', ...(opts.model ? ['--model', opts.model] : [])],
+      [
+        '-p',
+        ...(opts.resumeSessionId ? ['--resume', opts.resumeSessionId] : []),
+        ...(opts.bypassPermissions ? ['--dangerously-skip-permissions'] : []),
+        opts.prompt,
+        '--output-format',
+        'stream-json',
+        '--verbose',
+        ...(opts.model ? ['--model', opts.model] : []),
+      ],
       { cwd: opts.cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'] },
     );
     const id = opts.taskId;
@@ -117,14 +129,14 @@ export class ClaudeAdapter implements AgentAdapter {
         sessionId: sessionId ?? id,
         kind: 'task-end',
         summary: state === 'done' ? '任务完成' : `任务异常退出${errTail ? ':' + truncate(errTail, 160) : ''}`,
-        meta: { taskId: id, exitCode, state },
+        meta: { taskId: id, conversationId: opts.conversationId, exitCode, state },
       });
     };
 
     child.on('error', (err) => {
       onEvent({
         ts: Date.now(), agent: 'claude', projectDir: opts.cwd, sessionId: sessionId ?? id,
-        kind: 'error', summary: `启动失败:${err.message}`, meta: { taskId: id },
+        kind: 'error', summary: `启动失败:${err.message}`, meta: { taskId: id, conversationId: opts.conversationId },
       });
       settle(null, 'error');
     });
@@ -143,14 +155,14 @@ export class ClaudeAdapter implements AgentAdapter {
         onEvent({
           ts: Date.now(), agent: 'claude', projectDir: opts.cwd, sessionId: sessionId!,
           kind: 'session-start', summary: `任务会话开始(${String(rec.model ?? '模型')})`,
-          meta: { taskId: id, model: rec.model, cwd: rec.cwd },
+          meta: { taskId: id, conversationId: opts.conversationId, model: rec.model, cwd: rec.cwd },
         });
         return;
       }
       // stream-json 的消息体结构与 jsonl 一致,直接复用归一化器
       for (const e of normalizeRecord(rec)) {
         if (e.kind === 'user-message') continue; // 工具结果回显太噪,略过
-        onEvent({ ...e, sessionId: sessionId ?? e.sessionId, meta: { ...e.meta, taskId: id } });
+        onEvent({ ...e, sessionId: sessionId ?? e.sessionId, meta: { ...e.meta, taskId: id, conversationId: opts.conversationId } });
       }
     });
     child.stderr?.on('data', (chunk: Buffer) => {
@@ -226,6 +238,78 @@ export class ClaudeAdapter implements AgentAdapter {
       /* 忽略 */
     }
     return { agent: this.agentId, sections, notes };
+  }
+
+  // ---- 配置编辑(settings.json 只动目标键,其余保留) ----
+
+  private readonly settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+
+  private async readSettings(): Promise<Record<string, unknown>> {
+    try {
+      return JSON.parse(await fs.readFile(this.settingsPath, 'utf8')) as Record<string, unknown>;
+    } catch {
+      return {};
+    }
+  }
+
+  async configSchema(): Promise<ConfigFieldDef[]> {
+    const settings = await this.readSettings();
+    const env = (settings.env ?? {}) as Record<string, unknown>;
+    const root = (k: string): string => (typeof settings[k] === 'string' ? (settings[k] as string) : '');
+    const envStr = (k: string): string => (typeof env[k] === 'string' ? (env[k] as string) : '');
+    const mk = (key: string, label: string, source: string, opts?: Partial<ConfigFieldDef>): ConfigFieldDef => ({
+      key,
+      label,
+      type: 'string',
+      group: '模型接入',
+      value: source && isSecretKey(key) ? maskSecret(source) : source,
+      ...opts,
+    });
+    return [
+      mk('env.ANTHROPIC_AUTH_TOKEN', '认证令牌', envStr('ANTHROPIC_AUTH_TOKEN'), { secret: true, hint: '留空保持不变' }),
+      mk('env.ANTHROPIC_API_KEY', 'API Key', envStr('ANTHROPIC_API_KEY'), { secret: true }),
+      mk('env.ANTHROPIC_BASE_URL', 'Base URL', envStr('ANTHROPIC_BASE_URL'), { hint: '如 https://open.bigmodel.cn/api/anthropic' }),
+      mk('env.ANTHROPIC_MODEL', '模型', envStr('ANTHROPIC_MODEL')),
+      mk('env.ANTHROPIC_DEFAULT_SONNET_MODEL', '默认 Sonnet 模型', envStr('ANTHROPIC_DEFAULT_SONNET_MODEL')),
+      mk('env.ANTHROPIC_DEFAULT_OPUS_MODEL', '默认 Opus 模型', envStr('ANTHROPIC_DEFAULT_OPUS_MODEL')),
+      mk('env.ANTHROPIC_DEFAULT_HAIKU_MODEL', '默认 Haiku 模型', envStr('ANTHROPIC_DEFAULT_HAIKU_MODEL')),
+      mk('model', '默认模型(根键)', root('model')),
+    ];
+  }
+
+  async getConfigValues(): Promise<Record<string, string>> {
+    const settings = await this.readSettings();
+    const env = (settings.env ?? {}) as Record<string, unknown>;
+    const out: Record<string, string> = {};
+    const schema = await this.configSchema();
+    for (const f of schema) {
+      const source = f.key.startsWith('env.')
+        ? env[f.key.slice(4)]
+        : settings[f.key];
+      out[f.key] = typeof source === 'string' ? source : '';
+    }
+    return out;
+  }
+
+  async updateConfig(values: Record<string, string>): Promise<{ applied: string[] }> {
+    const settings = await this.readSettings();
+    const env = (settings.env ?? {}) as Record<string, unknown>;
+    const applied: string[] = [];
+    for (const [key, value] of Object.entries(values)) {
+      if (key.startsWith('env.')) {
+        const name = key.slice(4);
+        if (!name) continue;
+        env[name] = value;
+        applied.push(key);
+      } else if (key) {
+        settings[key] = value;
+        applied.push(key);
+      }
+    }
+    if (Object.keys(env).length) settings.env = env;
+    await fs.mkdir(path.dirname(this.settingsPath), { recursive: true });
+    await fs.writeFile(this.settingsPath, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+    return { applied };
   }
 
   describeStatus(extra: Pick<AgentStatus, 'activeTasks' | 'queuedTasks' | 'sessionsCount'>): AgentStatus {

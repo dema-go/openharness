@@ -15,15 +15,18 @@ import {
   type AgentConfigEntry,
   type AgentConfigInfo,
   type AgentStatus,
+  type ConfigFieldDef,
   type CursorStore,
   type HarnessEvent,
   type IndexHandlers,
   type LaunchOptions,
   type SessionSummary,
   type TaskHandle,
+  isSecretKey,
+  maskSecret,
   truncate,
 } from '@openharness/core';
-import { entry } from '../config-utils.js';
+import { entry, patchYamlFlat, patchYamlIndent } from '../config-utils.js';
 import { listSessionFiles, parseSessionFile, type ParseResult } from './session-file.js';
 
 export const DSH_SESSIONS_ROOT = path.join(os.homedir(), '.dsh', 'sessions');
@@ -95,6 +98,10 @@ export class DshAdapter implements AgentAdapter {
   }
 
   async launch(opts: LaunchOptions, onEvent: (e: HarnessEvent) => void): Promise<TaskHandle> {
+    // 注意:dsh headless 不接受 --resume(仅 tui 支持),续接上下文由
+    // ConversationManager 注入摘要完成。
+    // bypassPermissions(dsh 无对应 CLI 开关):权限由 ~/.dsh/settings.yaml 的
+    // permission.defaultPreset 控制,设置 danger-full-access 即为完全自主。
     const child = spawn('dsh', ['--profile', 'headless', opts.prompt], {
       cwd: opts.cwd,
       detached: true,
@@ -113,21 +120,21 @@ export class DshAdapter implements AgentAdapter {
         onEvent({
           ts: Date.now(), agent: 'dsh', projectDir: opts.cwd, sessionId: id,
           kind: 'assistant-message', summary: truncate(final, 400),
-          meta: { taskId: id },
+          meta: { taskId: id, conversationId: opts.conversationId },
         });
       }
       onEvent({
         ts: Date.now(), agent: 'dsh', projectDir: opts.cwd, sessionId: id,
         kind: 'task-end',
         summary: state === 'done' ? '任务完成' : `任务异常退出${errTail ? ':' + truncate(errTail, 160) : ''}`,
-        meta: { taskId: id, exitCode, state },
+        meta: { taskId: id, conversationId: opts.conversationId, exitCode, state },
       });
     };
 
     child.on('error', (err) => {
       onEvent({
         ts: Date.now(), agent: 'dsh', projectDir: opts.cwd, sessionId: id,
-        kind: 'error', summary: `启动失败:${err.message}`, meta: { taskId: id },
+        kind: 'error', summary: `启动失败:${err.message}`, meta: { taskId: id, conversationId: opts.conversationId },
       });
       settle(null, 'error');
     });
@@ -185,25 +192,12 @@ export class DshAdapter implements AgentAdapter {
     const notes: string[] = [];
     try {
       const yaml = await fs.readFile(path.join(os.homedir(), '.dsh', 'settings.yaml'), 'utf8');
-      const get = (section: string, key: string): string | null => {
-        const inSection = yaml.split('\n').some((l) => l.trim() === `${section}:`);
-        if (!inSection) return null;
-        const lines = yaml.split('\n');
-        const start = lines.findIndex((l) => l.trim() === `${section}:`);
-        for (let i = start + 1; i < lines.length; i++) {
-          const line = lines[i]!;
-          if (line && !line.startsWith(' ') && !line.startsWith('\t')) break;
-          const m = line.match(new RegExp(`^\\s+${key}:\\s*(.+)$`));
-          if (m) return m[1]!.trim().replace(/^"|"$/g, '');
-        }
-        return null;
-      };
-      const preset = get('permission', 'defaultPreset');
+      const preset = yamlGet(yaml, 'permission', 'defaultPreset');
       if (preset) sections.push({ title: '权限', items: [{ key: 'defaultPreset', value: preset }] });
       const modelItems = [
-        ...(get('agent-default-model', 'provider') ? [entry('provider', get('agent-default-model', 'provider')!)] : []),
-        ...(get('agent-default-model', 'model') ? [entry('model', get('agent-default-model', 'model')!)] : []),
-        ...(get('agent-default-model', 'reasoningEffort') ? [entry('reasoningEffort', get('agent-default-model', 'reasoningEffort')!)] : []),
+        ...(yamlGet(yaml, 'agent-default-model', 'provider') ? [entry('provider', yamlGet(yaml, 'agent-default-model', 'provider')!)] : []),
+        ...(yamlGet(yaml, 'agent-default-model', 'model') ? [entry('model', yamlGet(yaml, 'agent-default-model', 'model')!)] : []),
+        ...(yamlGet(yaml, 'agent-default-model', 'reasoningEffort') ? [entry('reasoningEffort', yamlGet(yaml, 'agent-default-model', 'reasoningEffort')!)] : []),
       ];
       if (modelItems.length) sections.push({ title: '默认模型', items: modelItems });
       const providerNames = [...yaml.matchAll(/^\s{4}([A-Za-z0-9-]+):\s*$/gm)].map((m) => m[1]!);
@@ -234,6 +228,111 @@ export class DshAdapter implements AgentAdapter {
     return { agent: this.agentId, sections, notes };
   }
 
+  // ---- 配置编辑(settings.yaml / .credentials.yaml 逐行补丁) ----
+
+  private readonly settingsPath = path.join(os.homedir(), '.dsh', 'settings.yaml');
+  private readonly credentialsPath = path.join(os.homedir(), '.dsh', '.credentials.yaml');
+
+  private async readFileSafe(p: string): Promise<string> {
+    try {
+      return await fs.readFile(p, 'utf8');
+    } catch {
+      return '';
+    }
+  }
+
+  async configSchema(): Promise<ConfigFieldDef[]> {
+    const settingsYaml = await this.readFileSafe(this.settingsPath);
+    const credYaml = await this.readFileSafe(this.credentialsPath);
+    const settings = (k: string): string => {
+      const [section, key] = k.split('.');
+      return yamlGet(settingsYaml, section!, key!) ?? '';
+    };
+    const cred = (k: string): string => {
+      for (const line of credYaml.split('\n')) {
+        const m = line.match(new RegExp(`^${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:\\s*(.*)$`));
+        if (m) return m[1]!.trim().replace(/^"|"$/g, '');
+      }
+      return '';
+    };
+    const mk = (key: string, label: string, value: string, opts?: Partial<ConfigFieldDef>): ConfigFieldDef => ({
+      key,
+      label,
+      type: 'string',
+      group: '默认模型',
+      value: opts?.secret && value ? maskSecret(value) : value,
+      ...opts,
+    });
+    return [
+      mk('agent-default-model.provider', 'Provider', settings('agent-default-model.provider'), {
+        hint: 'settings.yaml 中 llm-pi-ai.providers 下注册的 id',
+      }),
+      mk('agent-default-model.model', '模型', settings('agent-default-model.model')),
+      mk('agent-default-model.reasoningEffort', '推理强度', settings('agent-default-model.reasoningEffort'), {
+        type: 'select',
+        options: ['minimal', 'low', 'medium', 'high', 'max'],
+      }),
+      mk('permission.defaultPreset', '默认权限', settings('permission.defaultPreset'), {
+        type: 'select',
+        options: ['read-only', 'workspace-write', 'danger-full-access'],
+        group: '权限',
+      }),
+      mk('cred.DEEPSEEK_API_KEY', 'DEEPSEEK_API_KEY', cred('DEEPSEEK_API_KEY'), { secret: true, group: '凭据' }),
+      mk('cred.ZAI_CODING_CN_API_KEY', 'ZAI_CODING_CN_API_KEY', cred('ZAI_CODING_CN_API_KEY'), { secret: true, group: '凭据' }),
+    ];
+  }
+
+  async getConfigValues(): Promise<Record<string, string>> {
+    const settingsYaml = await this.readFileSafe(this.settingsPath);
+    const credYaml = await this.readFileSafe(this.credentialsPath);
+    const out: Record<string, string> = {};
+    const schema = await this.configSchema();
+    for (const f of schema) {
+      if (f.key.startsWith('cred.')) {
+        const name = f.key.slice(5);
+        for (const line of credYaml.split('\n')) {
+          const m = line.match(new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*:\\s*(.*)$`));
+          if (m) {
+            out[f.key] = m[1]!.trim().replace(/^"|"$/g, '');
+            break;
+          }
+        }
+        if (!(f.key in out)) out[f.key] = '';
+      } else {
+        const [section, key] = f.key.split('.');
+        out[f.key] = yamlGet(settingsYaml, section!, key!) ?? '';
+      }
+    }
+    return out;
+  }
+
+  async updateConfig(values: Record<string, string>): Promise<{ applied: string[] }> {
+    const settingsUpdates: Array<{ section: string | null; key: string; value: string }> = [];
+    const credUpdates: Array<{ key: string; value: string }> = [];
+    for (const [key, value] of Object.entries(values)) {
+      if (key.startsWith('cred.')) {
+        credUpdates.push({ key: key.slice(5), value });
+      } else if (key.includes('.')) {
+        const [section, k] = key.split('.');
+        settingsUpdates.push({ section: section!, key: k!, value });
+      }
+    }
+    const applied: string[] = [];
+    if (settingsUpdates.length) {
+      const content = await this.readFileSafe(this.settingsPath);
+      await fs.mkdir(path.dirname(this.settingsPath), { recursive: true });
+      await fs.writeFile(this.settingsPath, patchYamlIndent(content, settingsUpdates), 'utf8');
+      applied.push(...settingsUpdates.map((u) => `${u.section}.${u.key}`));
+    }
+    if (credUpdates.length) {
+      const content = await this.readFileSafe(this.credentialsPath);
+      await fs.mkdir(path.dirname(this.credentialsPath), { recursive: true });
+      await fs.writeFile(this.credentialsPath, patchYamlFlat(content, credUpdates), 'utf8');
+      applied.push(...credUpdates.map((u) => `cred.${u.key}`));
+    }
+    return { applied };
+  }
+
   describeStatus(extra: Pick<AgentStatus, 'activeTasks' | 'queuedTasks' | 'sessionsCount'>): AgentStatus {
     return { agent: this.agentId, state: 'idle', enabled: this.enabled, ...extra };
   }
@@ -252,4 +351,18 @@ export class DshAdapter implements AgentAdapter {
       resumeCommand: this.resumeCommand(r.sessionId),
     };
   }
+}
+
+/** 缩进式 YAML:读取 section 下的单行标量键(不存在返回 null) */
+function yamlGet(content: string, section: string, key: string): string | null {
+  const lines = content.split('\n');
+  const start = lines.findIndex((l) => l.trim() === `${section}:`);
+  if (start === -1) return null;
+  for (let i = start + 1; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (line && !line.startsWith(' ') && !line.startsWith('\t')) break;
+    const m = line.match(new RegExp(`^\\s+${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:\\s*(.+)$`));
+    if (m) return m[1]!.trim().replace(/^"|"$/g, '');
+  }
+  return null;
 }

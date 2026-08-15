@@ -5,7 +5,18 @@
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
-import type { CursorStore, HarnessEvent, SessionSummary, TaskInfo } from '@openharness/core';
+import type {
+  AgentId,
+  ConversationAgentState,
+  ConversationMessage,
+  ConversationRole,
+  ConversationSummary,
+  CursorStore,
+  EventKind,
+  HarnessEvent,
+  SessionSummary,
+  TaskInfo,
+} from '@openharness/core';
 
 export class Store implements CursorStore {
   private readonly db: Database.Database;
@@ -57,6 +68,29 @@ export class Store implements CursorStore {
         started_at INTEGER NOT NULL,
         ended_at INTEGER,
         exit_code INTEGER
+      );
+      CREATE TABLE IF NOT EXISTS conversations (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS conversation_messages (
+        seq INTEGER PRIMARY KEY AUTOINCREMENT,
+        conv_id TEXT NOT NULL,
+        agent TEXT,
+        role TEXT NOT NULL,
+        content TEXT NOT NULL,
+        task_id TEXT,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_conv_msgs ON conversation_messages(conv_id, seq);
+      CREATE TABLE IF NOT EXISTS conversation_agents (
+        conv_id TEXT NOT NULL,
+        agent TEXT NOT NULL,
+        session_id TEXT,
+        cwd TEXT,
+        PRIMARY KEY (conv_id, agent)
       );
     `);
     // 迁移:旧库 events 表补 model 列(按模型用量聚合)
@@ -141,7 +175,25 @@ export class Store implements CursorStore {
   }
 
   events(opts: { limit?: number; agent?: string; session?: string; sinceSeq?: number } = {}): HarnessEvent[] {
-    const { limit = 100, agent, session, sinceSeq } = opts;
+    return this.eventsPage(opts).events;
+  }
+
+  /**
+   * 分页查询:游标(beforeSeq 取更早)、类型多选、关键词。
+   * 返回最新一页(时间正序)与是否还有更早数据。
+   */
+  eventsPage(
+    opts: {
+      limit?: number;
+      agent?: string;
+      session?: string;
+      sinceSeq?: number;
+      beforeSeq?: number;
+      kinds?: EventKind[];
+      q?: string;
+    } = {},
+  ): { events: HarnessEvent[]; hasMore: boolean } {
+    const { limit = 100, agent, session, sinceSeq, beforeSeq, kinds, q } = opts;
     const clauses: string[] = [];
     const params: Array<string | number> = [];
     if (agent) {
@@ -156,69 +208,102 @@ export class Store implements CursorStore {
       clauses.push('seq > ?');
       params.push(sinceSeq);
     }
+    if (beforeSeq !== undefined) {
+      clauses.push('seq < ?');
+      params.push(beforeSeq);
+    }
+    if (kinds && kinds.length > 0) {
+      clauses.push(`kind IN (${kinds.map(() => '?').join(',')})`);
+      params.push(...kinds);
+    }
+    if (q) {
+      clauses.push('summary LIKE ?');
+      params.push(`%${q}%`);
+    }
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
     const rows = this.db
       .prepare(`SELECT * FROM events ${where} ORDER BY seq DESC LIMIT ?`)
-      .all(...params, limit) as Array<Record<string, unknown>>;
-    return rows.reverse().map((r) => ({
-      ts: r.ts as number,
-      agent: r.agent as HarnessEvent['agent'],
-      sessionId: r.session_id as string,
-      kind: r.kind as HarnessEvent['kind'],
-      summary: r.summary as string,
-      projectDir: (r.project_dir as string | null) ?? null,
-      usage:
-        r.input_tokens != null || r.output_tokens != null
-          ? { input: (r.input_tokens as number) ?? 0, output: (r.output_tokens as number) ?? 0 }
-          : undefined,
-      meta: r.meta_json ? (JSON.parse(r.meta_json as string) as Record<string, unknown>) : undefined,
-    }));
+      .all(...params, limit + 1) as Array<Record<string, unknown>>;
+    const hasMore = rows.length > limit;
+    return {
+      hasMore,
+      events: rows
+        .slice(0, limit)
+        .reverse()
+        .map((r) => ({
+          ts: r.ts as number,
+          agent: r.agent as HarnessEvent['agent'],
+          sessionId: r.session_id as string,
+          kind: r.kind as HarnessEvent['kind'],
+          summary: r.summary as string,
+          projectDir: (r.project_dir as string | null) ?? null,
+          seq: r.seq as number,
+          usage:
+            r.input_tokens != null || r.output_tokens != null
+              ? { input: (r.input_tokens as number) ?? 0, output: (r.output_tokens as number) ?? 0 }
+              : undefined,
+          meta: r.meta_json ? (JSON.parse(r.meta_json as string) as Record<string, unknown>) : undefined,
+        })),
+    };
   }
 
   // ---- usage 聚合(F6)----
-  usage(): UsageReport {
+  /** 全部聚合按时间范围过滤:from/to 为毫秒时间戳,缺省 = 全量 */
+  usage(opts: { from?: number; to?: number } = {}): UsageReport {
+    const { from, to } = opts;
+    const where: string[] = [];
+    const params: number[] = [];
+    if (from !== undefined) {
+      where.push('ts >= ?');
+      params.push(from);
+    }
+    if (to !== undefined) {
+      where.push('ts <= ?');
+      params.push(to);
+    }
+    const w = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const total = this.db
-      .prepare('SELECT COALESCE(SUM(input_tokens),0) AS i, COALESCE(SUM(output_tokens),0) AS o FROM events')
-      .get() as { i: number; o: number };
+      .prepare(`SELECT COALESCE(SUM(input_tokens),0) AS i, COALESCE(SUM(output_tokens),0) AS o FROM events ${w}`)
+      .get(...params) as { i: number; o: number };
     const toolCalls = this.db
-      .prepare("SELECT COUNT(*) AS n FROM events WHERE kind = 'tool-call'")
-      .get() as { n: number };
+      .prepare(`SELECT COUNT(*) AS n FROM events ${w ? `${w} AND` : 'WHERE'} kind = 'tool-call'`)
+      .get(...params) as { n: number };
     const byAgent = (
       this.db
         .prepare(
-          'SELECT agent, COALESCE(SUM(input_tokens),0) AS i, COALESCE(SUM(output_tokens),0) AS o FROM events GROUP BY agent ORDER BY i + o DESC',
+          `SELECT agent, COALESCE(SUM(input_tokens),0) AS i, COALESCE(SUM(output_tokens),0) AS o
+           FROM events ${w} GROUP BY agent ORDER BY i + o DESC`,
         )
-        .all() as Array<{ agent: string; i: number; o: number }>
+        .all(...params) as Array<{ agent: string; i: number; o: number }>
     ).map((r) => ({ agent: r.agent as UsageReport['byAgent'][number]['agent'], input: r.i, output: r.o }));
     const byModel = (
       this.db
         .prepare(
           `SELECT COALESCE(model, '(未知)') AS m, agent,
                   COALESCE(SUM(input_tokens),0) AS i, COALESCE(SUM(output_tokens),0) AS o
-           FROM events GROUP BY m, agent
+           FROM events ${w} GROUP BY m, agent
            HAVING COALESCE(SUM(input_tokens),0) + COALESCE(SUM(output_tokens),0) > 0
            ORDER BY i + o DESC`,
         )
-        .all() as Array<{ m: string; agent: string; i: number; o: number }>
+        .all(...params) as Array<{ m: string; agent: string; i: number; o: number }>
     ).map((r) => ({ model: r.m, agent: r.agent as UsageReport['byModel'][number]['agent'], input: r.i, output: r.o }));
-    const since14d = Date.now() - 14 * 86400_000;
     const byDay = (
       this.db
         .prepare(
           `SELECT date(ts/1000,'unixepoch','localtime') AS day,
                   COALESCE(SUM(input_tokens),0) AS i, COALESCE(SUM(output_tokens),0) AS o
-           FROM events WHERE ts >= ? GROUP BY day ORDER BY day ASC`,
+           FROM events ${w} GROUP BY day ORDER BY day ASC`,
         )
-        .all(since14d) as Array<{ day: string; i: number; o: number }>
+        .all(...params) as Array<{ day: string; i: number; o: number }>
     ).map((r) => ({ day: r.day, input: r.i, output: r.o }));
     const byProject = (
       this.db
         .prepare(
           `SELECT project_dir AS p, COALESCE(SUM(input_tokens),0) AS i, COALESCE(SUM(output_tokens),0) AS o
-           FROM events WHERE project_dir IS NOT NULL AND project_dir != ''
+           FROM events ${w ? `${w} AND` : 'WHERE'} project_dir IS NOT NULL AND project_dir != ''
            GROUP BY project_dir ORDER BY i + o DESC LIMIT 8`,
         )
-        .all() as Array<{ p: string; i: number; o: number }>
+        .all(...params) as Array<{ p: string; i: number; o: number }>
     ).map((r) => ({ project: r.p, input: r.i, output: r.o }));
 
     return { total: { input: total.i, output: total.o }, toolCalls: toolCalls.n, byAgent, byModel, byDay, byProject };
@@ -280,6 +365,153 @@ export class Store implements CursorStore {
 
   close(): void {
     this.db.close();
+  }
+
+  // ---- 对话室 ----
+
+  createConversation(id: string, title: string, now: number): void {
+    this.db
+      .prepare('INSERT INTO conversations (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)')
+      .run(id, title, now, now);
+  }
+
+  touchConversation(id: string, now: number): void {
+    this.db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, id);
+  }
+
+  renameConversation(id: string, title: string, now: number): void {
+    this.db.prepare('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?').run(title, now, id);
+  }
+
+  listConversations(): ConversationSummary[] {
+    const rows = this.db
+      .prepare(
+        `SELECT c.*, COUNT(m.seq) AS message_count,
+                (SELECT content FROM conversation_messages m2 WHERE m2.conv_id = c.id ORDER BY m2.seq DESC LIMIT 1) AS last_message
+         FROM conversations c LEFT JOIN conversation_messages m ON m.conv_id = c.id
+         GROUP BY c.id ORDER BY c.updated_at DESC LIMIT 200`,
+      )
+      .all() as Array<Record<string, unknown>>;
+    return rows.map((r) => ({
+      id: r.id as string,
+      title: r.title as string,
+      createdAt: r.created_at as number,
+      updatedAt: r.updated_at as number,
+      messageCount: r.message_count as number,
+      lastMessage: (r.last_message as string | null) ?? undefined,
+    }));
+  }
+
+  getConversation(id: string): ConversationSummary | undefined {
+    return this.listConversations().find((c) => c.id === id);
+  }
+
+  addConversationMessage(
+    convId: string,
+    m: {
+      agent?: AgentId | null;
+      role: ConversationRole;
+      content: string;
+      taskId?: string | null;
+      createdAt?: number;
+    },
+  ): ConversationMessage {
+    const createdAt = m.createdAt ?? Date.now();
+    const info = this.db
+      .prepare(
+        `INSERT INTO conversation_messages (conv_id, agent, role, content, task_id, created_at)
+         VALUES (@convId, @agent, @role, @content, @taskId, @createdAt)`,
+      )
+      .run({
+        convId,
+        agent: m.agent ?? null,
+        role: m.role,
+        content: m.content,
+        taskId: m.taskId ?? null,
+        createdAt,
+      });
+    this.touchConversation(convId, createdAt);
+    return { seq: Number(info.lastInsertRowid), convId, agent: m.agent ?? null, role: m.role, content: m.content, taskId: m.taskId ?? null, createdAt };
+  }
+
+  /** 任务结束时回填 task 消息文案 */
+  updateConversationTaskMessage(taskId: string, content: string, now: number): void {
+    this.db
+      .prepare("UPDATE conversation_messages SET content = ?, created_at = ? WHERE task_id = ? AND role = 'task'")
+      .run(content, now, taskId);
+  }
+
+  conversationMessages(convId: string, opts: { limit?: number; beforeSeq?: number } = {}): { messages: ConversationMessage[]; hasMore: boolean } {
+    const { limit = 100, beforeSeq } = opts;
+    const clauses = ['conv_id = ?'];
+    const params: Array<string | number> = [convId];
+    if (beforeSeq !== undefined) {
+      clauses.push('seq < ?');
+      params.push(beforeSeq);
+    }
+    const rows = this.db
+      .prepare(`SELECT * FROM conversation_messages WHERE ${clauses.join(' AND ')} ORDER BY seq DESC LIMIT ?`)
+      .all(...params, limit + 1) as Array<Record<string, unknown>>;
+    const hasMore = rows.length > limit;
+    return {
+      hasMore,
+      messages: rows
+        .slice(0, limit)
+        .reverse()
+        .map((r) => ({
+          seq: r.seq as number,
+          convId: r.conv_id as string,
+          agent: (r.agent as AgentId | null) ?? null,
+          role: r.role as ConversationRole,
+          content: r.content as string,
+          taskId: (r.task_id as string | null) ?? null,
+          createdAt: r.created_at as number,
+        })),
+    };
+  }
+
+  conversationMessagesCount(convId: string): number {
+    const row = this.db.prepare('SELECT COUNT(*) AS n FROM conversation_messages WHERE conv_id = ?').get(convId) as { n: number };
+    return row.n;
+  }
+
+  setConversationAgent(convId: string, agent: AgentId, sessionId: string | null, cwd: string | null): void {
+    this.db
+      .prepare(
+        `INSERT INTO conversation_agents (conv_id, agent, session_id, cwd) VALUES (?, ?, ?, ?)
+         ON CONFLICT(conv_id, agent) DO UPDATE SET session_id = excluded.session_id, cwd = excluded.cwd`,
+      )
+      .run(convId, agent, sessionId, cwd);
+  }
+
+  conversationAgents(convId: string): ConversationAgentState[] {
+    const rows = this.db
+      .prepare('SELECT * FROM conversation_agents WHERE conv_id = ?')
+      .all(convId) as Array<Record<string, unknown>>;
+    return rows.map((r) => ({
+      convId: r.conv_id as string,
+      agent: r.agent as AgentId,
+      sessionId: (r.session_id as string | null) ?? null,
+      cwd: (r.cwd as string | null) ?? null,
+    }));
+  }
+
+  /** 反向查找:某个原生会话当前挂在哪个对话上(供 watch 路径事件归因) */
+  findConversationBySession(agent: AgentId, sessionId: string): string | undefined {
+    const row = this.db
+      .prepare('SELECT conv_id FROM conversation_agents WHERE agent = ? AND session_id = ? LIMIT 1')
+      .get(agent, sessionId) as { conv_id: string } | undefined;
+    return row?.conv_id;
+  }
+
+  deleteConversation(id: string): boolean {
+    const info = this.db
+      .prepare('DELETE FROM conversations WHERE id = ?')
+      .run(id);
+    if (info.changes === 0) return false;
+    this.db.prepare('DELETE FROM conversation_messages WHERE conv_id = ?').run(id);
+    this.db.prepare('DELETE FROM conversation_agents WHERE conv_id = ?').run(id);
+    return true;
   }
 }
 
