@@ -112,3 +112,14 @@
 - [x] 13.4 实测:渲染态(列表/行内代码/代码块/表格)+ 原文态切换正常
 - [x] 13.5 feedback-loop.md 补充"回标前重读反馈文件"规则,防再漏
 - [x] 13.6 回标 + CHANGELOG + README + commit + push
+
+## 第 6 轮:2026-08-16 用户反馈(第 4 轮:求职作品集与工程可信度,6 条)
+
+- [x] 6.1 #3 测试体系:vitest 39 项断言(7 文件:core 工具/解析器/游标/去重/状态机/密钥/补丁/Markdown 消毒)
+- [x] 6.2 #3 CI:.github/workflows/ci.yml(typecheck+test+build+check:dates)
+- [x] 6.3 #1/#2 口径统一:README 定位段重写、SUMMARY 数据快照化、新增 docs/resume-bullets.md
+- [x] 6.4 #4 演示 GIF:90 秒 3MB(docs/screenshots/demo.gif)+ README 首屏重构
+- [x] 6.5 #5 深色作品集截图 5 张(docs/screenshots/portfolio/)
+- [x] 6.6 #6 Supervisor 按反馈建议暂缓,记入 Roadmap v0.7 候选
+- [x] 6.7 全量验证:test/typecheck/build/check:dates + 截图/GIF 核验
+- [x] 6.8 回标 6 条 + CHANGELOG + commit + push

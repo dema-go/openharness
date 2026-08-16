@@ -11,9 +11,13 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "check:dates": "node scripts/check-dates.mjs",
-    "start": "pnpm --filter @openharness/server start"
+    "start": "pnpm --filter @openharness/server start",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
-    "typescript": "^5.7.0"
+    "jsdom": "^30.0.1",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.10"
   }
 }

@@ -72,6 +72,22 @@
 ### 文档
 - feedback-loop.md 补充硬规则:**回标前必须重读 user-question.md 全文**,防闭环中追加的条目被漏掉
 
+## [v0.5.0] - 2026-08-16
+
+第 4 轮反馈(求职作品集与工程可信度,6 条;#6 Supervisor 按反馈自身建议暂缓入 Roadmap)。
+
+### 新增
+- **自动化测试体系**:vitest 7 个测试文件 39 项断言——core 工具函数、四工具会话解析器(注入过滤/全文透传/游标续读)、事件指纹去重、ConversationManager 状态机(resume 链/摘要注入/收尾反馈/防重复气泡)、密钥零片段、TOML/YAML 逐行补丁、Markdown 渲染消毒
+- **GitHub Actions CI**:`.github/workflows/ci.yml`(typecheck → test → build → check:dates)
+- **一分钟演示 GIF**:90 秒 3MB(docs/screenshots/demo.gif),按脚本演示发任务→实时流→对话室→档案→用量→配置
+- **深色工程风作品集截图**:5 张(docs/screenshots/portfolio/),README 新增作品集小节
+- **简历口径文档**:docs/resume-bullets.md(定位/逐条可复核要点/禁用口径)
+
+### 文档
+- README:定位统一为「多 Agent 编排与可观测控制台」,首屏重构为定位→演示→解决问题→架构;删除「11 个 commit」等静态过程数字,改为「多轮真实使用反馈迭代」
+- SUMMARY:重写为定位口径 + API 实时数据快照(137 会话/458 万 tokens/5880 工具调用,标注动态)+ 10 个真实 bug 素材
+- Roadmap:v0.5 完成;Supervisor 编排层记入 v0.7 候选(默认关闭自动执行)
+
 ## [v0.3.0] - 2026-08-15
 
 用户反馈闭环第 1 轮(docs/harness/user-question.md),全部交付并端到端实测。

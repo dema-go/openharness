@@ -644,7 +644,7 @@ export interface UsageReport {
 }
 
 /** 按天聚合补零:from/to 为毫秒时间戳,缺省时以事件最早时间到今天为轴 */
-function fillDayAxis(
+export function fillDayAxis(
   rows: Array<{ day: string; i: number; o: number }>,
   from?: number,
   to?: number,

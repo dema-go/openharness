@@ -77,7 +77,7 @@ function collectText(content: unknown): string {
 }
 
 /** 把 cursor-agent 的流式记录归一化(协议与 Claude 类似,容错处理) */
-function normalizeStreamRecord(rec: Record<string, unknown>): HarnessEvent[] {
+export function normalizeStreamRecord(rec: Record<string, unknown>): HarnessEvent[] {
   const type = rec.type as string | undefined;
   const sessionId = (rec.session_id ?? rec.chatId ?? '') as string;
   const cwd = (rec.cwd as string) ?? null;

@@ -1,10 +1,12 @@
 # OpenHarness
 
-> **个人 Agent 控制台** —— 一个页面,管理、操作、监控你的所有 AI 编程 Agent(Cursor · Claude Code · Codex · DeepSeek Harness),保留每个工具的原生特色。
-> 视觉:《阿衰》式彩色漫画风,由 Open Design × DeepSeek Harness 设计生成([设计文档](docs/DESIGN.md))。
-> 当前版本:**v0.4.0**(变更记录见 [CHANGELOG](CHANGELOG.md))。
+> **多 Agent 编排与可观测控制台(AI Coding Agent 控制面)** —— 一个页面,管理、操作、监控你的所有 AI 编程 Agent(Cursor · Claude Code · Codex · DeepSeek Harness),保留每个工具的原生特色。
+> 项目**不重新实现模型层 Agent**(Planning / Tool Calling / Runtime 均为工具原生能力),而是解决异构适配、任务生命周期、会话状态、实时观测与安全边界问题。
+> 当前版本:**v0.5.0**(变更记录见 [CHANGELOG](CHANGELOG.md))。
 
-![控制台首页](docs/screenshots/cartoon-home.png)
+## 一分钟演示
+
+![演示](docs/screenshots/demo.gif)
 
 ## 它解决什么问题
 
@@ -55,10 +57,11 @@
 | 对话室 | 会话式连续问答:聊天气泡(Markdown 渲染可开关)+ 原生 resume 续接上下文(claude/codex/cursor)+ dsh 摘要注入兜底;**同一对话内可切换 Agent**(注入最近对话摘要),历史会话一键续聊,记住每个会话的特工与目录 | ✅ |
 | 智能建议 | 关键词 × 工具特色矩阵评分,推荐 + 理由,人做决定 | ✅ |
 | 用量统计 | 总量 / 按工具 / 按模型 / 按天 / 按项目,范围可选(7/14/30/90 天/全部/自定义起止),含数据完整性标注 | ✅ |
-| 配置编辑 | 四工具配置直接编辑(api key / baseUrl / 模型等),写回原配置文件,密钥不回显 | ✅ |
+| 配置编辑 | 四工具配置直接编辑(api key / baseUrl / 模型等),写回原配置文件,密钥**零片段回显**(仅显示已设置) | ✅ |
 | 配置预设 | cc switch 式:整套配置一键存为预设、一键切换/删除,密钥仅存本机 | ✅ |
 | 通知 | 浏览器通知 + 服务端 macOS 通知(terminal-notifier,点击直达控制台,浏览器关闭也提醒) | ✅ |
 | 任务历史 | SQLite 持久化,重启保留,僵尸任务自动归位 | ✅ |
+| 自动化测试 | vitest 39 项断言(解析器/游标续读/去重/任务状态机/密钥脱敏/配置补丁)+ GitHub Actions CI(typecheck/test/build/check:dates) | ✅ |
 
 ## 技术栈
 
@@ -80,24 +83,32 @@ pnpm dev:web           # http://127.0.0.1:3901(前端热更新)
 
 ## 工程亮点
 
-- **11 个 commit、11 轮迭代全部端到端实测**,修出的真实 bug 本身就是最佳实践样本:任务 ID 归因断裂、进程探测误报(PATH 字符串污染)、SIGINT 状态竞态、文件游标跳过元数据(截断文件产生"幽灵会话")、队列自计数、密钥过度/不足脱敏、用量重复计数;
+- **经过多轮真实使用反馈迭代(20+ 项反馈闭环,见 CHANGELOG),每轮端到端实测**;修出的真实 bug 本身就是最佳实践样本:任务 ID 归因断裂、进程探测字符串污染、SIGINT 状态竞态、文件游标跳过元数据、双通道重复入库、headless 权限拦截假完成、chokidar v4 glob 失效等;
 - **统一事件模型 + 游标增量索引**:重启秒级续读,事件不重不漏;
 - **安全边界**:服务仅监听 127.0.0.1;密钥永不回显(编辑只提交新值、预设快照本地落盘),配置接口 0 密钥泄漏;
-- **设计**:「特工小队」漫画风(《阿衰》式)—— 四工具角色化(光标侠/小克/码星人/鲸酱),奶油纸底 + 墨线描边 + 硬实影 + 高饱和撞色,站酷快乐体 × Luckiest Guy × IBM Plex Mono,对话气泡状态、火花条签名元素,支持 reduced-motion。
+- **设计**:「特工小队」漫画风——四工具角色化(光标侠/小克/码星人/鲸酱),奶油纸底 + 墨线描边 + 硬实影 + 高饱和撞色,支持 reduced-motion。漫画风为产品特色,作品集另备**深色工程风截图**(见下)。
 
 ![发射台](docs/screenshots/cartoon-launcher.png)
+
+### 作品集素材(深色工程风)
+
+| 控制台首页 | 对话室 | 会话档案 | 用量账本 | 配置速览 |
+|---|---|---|---|---|
+| ![深色首页](docs/screenshots/portfolio/home-dark.png) | ![深色对话室](docs/screenshots/portfolio/conversation-dark.png) | ![深色档案](docs/screenshots/portfolio/sessions-dark.png) | ![深色用量](docs/screenshots/portfolio/usage-dark.png) | ![深色配置](docs/screenshots/portfolio/config-dark.png) |
 
 ## 文档
 
 - [PRD](docs/prd.md) · [架构设计](docs/architecture.md) · [技术栈决策](docs/stack-decision.md)
 - [开发规范](docs/harness/README.md)(反馈闭环 / 开发验证 / 提交规范 / 代码规范)· [用户反馈](docs/harness/user-question.md) · [变更记录](CHANGELOG.md)
-- [项目总结(面试向)](docs/SUMMARY.md) · [讨论与迭代记录](docs/vision-discussion.md)
+- [项目总结(面试向)](docs/SUMMARY.md) · [简历口径与要点](docs/resume-bullets.md) · [讨论与迭代记录](docs/vision-discussion.md)
 
 ## Roadmap
 
-- ✅ v0.3:对话室、配置编辑与预设、活动流分页筛选、用量范围、完全自主模式(已发布,见 CHANGELOG)
-- v0.4:费用估算(可配置价目表)、更多 Agent 工具(OpenCode / Aider…)、局域网远程访问
-- v0.5:任务模板与自动化工作流、多机会话同步
+- ✅ v0.3:对话室、配置编辑与预设、活动流分页筛选、用量范围、完全自主模式
+- ✅ v0.4:Markdown 渲染、去重/注入分离、会话档案分页、密钥零片段、移动端响应式
+- ✅ v0.5:自动化测试与 CI、一分钟演示 GIF、作品集深色截图、定位与简历口径统一
+- v0.6:费用估算(可配置价目表)、更多 Agent 工具(OpenCode / Aider…)、局域网远程访问
+- v0.7:任务模板与自动化工作流、多机会话同步、Supervisor 编排层(候选,默认关闭自动执行)
 
 ## License
 
