@@ -2,7 +2,7 @@
 
 > **多 Agent 编排与可观测控制台(AI Coding Agent 控制面)** —— 一个页面,管理、操作、监控你的所有 AI 编程 Agent(Cursor · Claude Code · Codex · DeepSeek Harness),保留每个工具的原生特色。
 > 项目**不重新实现模型层 Agent**(Planning / Tool Calling / Runtime 均为工具原生能力),而是解决异构适配、任务生命周期、会话状态、实时观测与安全边界问题。
-> 当前版本:**v0.6.0**(变更记录见 [CHANGELOG](CHANGELOG.md))。
+> 当前版本:**v0.6.1**(变更记录见 [CHANGELOG](CHANGELOG.md))。
 
 ## 一分钟演示
 
@@ -54,7 +54,7 @@
 | 打断/移除 | 进程组 SIGINT,状态正确归因(stopped vs error) | ✅ |
 | 会话索引 | 4 工具会话统一索引(分页/全量搜索/时间线/统计;cursor 接入搜索库全文轨迹;空会话默认归档) | ✅ |
 | 深链恢复 | `claude --resume` / `codex resume` / `cursor agent --resume` / `dsh --profile tui --resume`,一键复制或**直接在终端打开** | ✅ |
-| 对话室 | 会话式连续问答:聊天气泡(Markdown+mermaid+KaTeX 渲染可开关,代码块复制)+ @mention 路由 + 送评审 + 原生 resume 续接上下文 + 会话内切换 Agent + 团队记忆注入 + 阶段标签 + 记住每个会话的特工与目录 | ✅ |
+| 对话室 | 会话式连续问答:聊天气泡(Markdown+mermaid+KaTeX 渲染可开关,代码块复制)+ @mention 路由(输入 @ 自动补全)+ 送评审 + 原生 resume 续接上下文 + 会话内切换 Agent + 团队记忆注入 + 阶段标签 + 记住每个会话的特工与目录 | ✅ |
 | 智能建议 | 关键词 × 工具特色矩阵评分,推荐 + 理由,人做决定 | ✅ |
 | 用量统计 | 总量 / 按工具 / 按模型 / 按天 / 按项目 + **费用估算**(可配置价目表),范围可选(7/14/30/90 天/全部/自定义起止),含数据完整性标注 | ✅ |
 | 配置编辑 | 四工具配置直接编辑(api key / baseUrl / 模型等),写回原配置文件,密钥**零片段回显**;特工角色卡可编辑并注入任务 | ✅ |

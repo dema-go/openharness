@@ -293,6 +293,46 @@ export function ConversationPanel(props: {
   /** 送评审:把一个特工的产出交给另一个特工评审(切换触发摘要注入) */
   const [reviewFor, setReviewFor] = useState<number | null>(null);
 
+  /** @ 自动补全:光标前的 @token 位置与已输入部分 */
+  const [mention, setMention] = useState<{ start: number; query: string; active: number } | null>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
+
+  const MENTION_OPTIONS = (['claude', 'cursor', 'codex', 'dsh'] as const).map((a) => ({
+    id: a,
+    name: AGENT_CHARACTER[a].name,
+  }));
+
+  /** 输入变化时检测光标前的 @token,弹补全列表 */
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    setInput(value);
+    const cursor = e.target.selectionStart ?? value.length;
+    const before = value.slice(0, cursor);
+    const m = before.match(/@([^\s@,，。:：]*)$/);
+    if (m && m.index !== undefined) {
+      setMention({ start: m.index, query: m[1]!, active: 0 });
+    } else {
+      setMention(null);
+    }
+  };
+
+  /** 选中某个特工:替换当前 @token 为「@名字 」并回焦输入框 */
+  const pickMention = (id: AgentId) => {
+    if (!mention) return;
+    const name = AGENT_CHARACTER[id].name;
+    const newText = input.slice(0, mention.start) + `@${name} ` + input.slice(mention.start + 1 + mention.query.length);
+    setInput(newText);
+    setMention(null);
+    requestAnimationFrame(() => {
+      const t = taRef.current;
+      if (t) {
+        t.focus();
+        const pos = mention.start + name.length + 2;
+        t.setSelectionRange(pos, pos);
+      }
+    });
+  };
+
   const sendReview = async (reviewer: AgentId) => {
     setReviewFor(null);
     if (!activeId || sending || running) return;
@@ -564,18 +604,65 @@ export function ConversationPanel(props: {
             {agent === 'dsh' && <span className="font-mono text-[9.5px] text-faint">DSH 由 settings.yaml 权限预设控制</span>}
           </label>
           </div>
-          <div className="flex items-end gap-2">
+          <div className="relative flex items-end gap-2">
+            {mention && (
+              <div className="absolute bottom-full left-0 z-20 mb-1 w-64 max-w-full overflow-hidden rounded-xl border-[3px] border-ink bg-white" style={{ boxShadow: '3px 3px 0 #221D15' }}>
+                <p className="border-b-2 border-ink bg-yellow px-2.5 py-1 font-display text-[11px] text-ink">@ 点名特工</p>
+                <ul>
+                  {MENTION_OPTIONS.filter(
+                    (o) => !mention.query || o.name.includes(mention.query) || o.id.includes(mention.query.toLowerCase()),
+                  ).map((o, i) => (
+                    <li key={o.id}>
+                      <button
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          pickMention(o.id);
+                        }}
+                        onMouseEnter={() => setMention((m) => (m ? { ...m, active: i } : m))}
+                        className={`flex w-full items-center gap-2 px-2.5 py-1.5 text-left ${mention.active === i ? 'bg-panel2' : 'bg-white'}`}
+                      >
+                        <AgentAvatar agent={o.id} size={22} />
+                        <span className="font-display text-[12px] text-ink">{o.name}</span>
+                        <span className="ml-auto font-mono text-[9.5px] text-faint">{o.id}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <textarea
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={handleInputChange}
               onKeyDown={(e) => {
+                if (mention) {
+                  const opts = MENTION_OPTIONS.filter(
+                    (o) => !mention.query || o.name.includes(mention.query) || o.id.includes(mention.query.toLowerCase()),
+                  );
+                  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    const delta = e.key === 'ArrowDown' ? 1 : -1;
+                    setMention((m) => (m ? { ...m, active: (m.active + delta + opts.length) % Math.max(opts.length, 1) } : m));
+                    return;
+                  }
+                  if (e.key === 'Escape') {
+                    setMention(null);
+                    return;
+                  }
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (opts[mention.active]) pickMention(opts[mention.active]!.id);
+                    return;
+                  }
+                }
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
                   void send();
                 }
               }}
+              ref={taRef}
               rows={2}
-              placeholder={`问 ${AGENT_CHARACTER[agent].name} 点什么…(Enter 发送,Shift+Enter 换行)`}
+              placeholder={`问 ${AGENT_CHARACTER[agent].name} 点什么…(Enter 发送,Shift+Enter 换行;@ 可点名特工)`}
               className="comic-input min-w-0 flex-1 resize-y"
             />
             <button
