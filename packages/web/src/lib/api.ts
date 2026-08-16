@@ -48,6 +48,33 @@ export const api = {
     const q = p.toString();
     return j<{ sessions: SessionSummary[]; total: number }>(`/sessions${q ? `?${q}` : ''}`);
   },
+  roles: () => j<Record<string, string>>('/roles'),
+  saveRole: (agent: string, text: string) =>
+    j<{ ok: boolean }>(`/roles/${agent}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text }),
+    }),
+  memory: () => j<{ text: string }>('/memory'),
+  pricing: () => j<{ models: Record<string, { input: number; output: number }>; default: { input: number; output: number } }>('/pricing'),
+  savePricing: (body: { models?: Record<string, { input: number; output: number }>; default?: { input: number; output: number } }) =>
+    j<{ ok: boolean }>('/pricing', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  setConversationStage: (id: string, stage: string) =>
+    j<{ ok: boolean; stage: string }>(`/conversations/${id}/stage`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ stage }),
+    }),
+  addMemory: (text: string) =>
+    j<{ ok: boolean }>('/memory', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text }),
+    }),
   pickDir: (mode: 'open' | 'new') =>
     j<{ path?: string; cancelled?: boolean }>('/pick-dir', {
       method: 'POST',

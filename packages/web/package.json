@@ -15,7 +15,9 @@
     "@fontsource/zcool-kuaile": "^5.3.0",
     "@openharness/core": "workspace:*",
     "dompurify": "^3.4.13",
+    "katex": "^0.18.4",
     "marked": "^18.0.9",
+    "mermaid": "^11.16.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

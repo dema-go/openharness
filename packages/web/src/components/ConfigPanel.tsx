@@ -26,11 +26,14 @@ export function ConfigPanel(): React.JSX.Element {
   const [presetNames, setPresetNames] = useState<Record<string, string>>({});
   const [feedback, setFeedback] = useState<Record<string, Feedback>>({});
   const [busyAgent, setBusyAgent] = useState<string | null>(null);
+  const [roles, setRoles] = useState<Record<string, string>>({});
+  const [roleDrafts, setRoleDrafts] = useState<Record<string, string>>({});
 
   const refresh = useCallback(async () => {
-    const [cfg, pre] = await Promise.all([api.config(), api.presets()]);
+    const [cfg, pre, rl] = await Promise.all([api.config(), api.presets(), api.roles()]);
     setConfigs(cfg);
     setPresets(pre);
+    setRoles(rl);
     const schemaMap: Record<string, ConfigFieldDef[]> = {};
     await Promise.all(
       cfg.map(async (c) => {
@@ -232,6 +235,32 @@ export function ConfigPanel(): React.JSX.Element {
                   )}
                 </div>
               )}
+
+              {/* 角色卡(持久身份):任务发射时注入一次 */}
+              <details className="mt-3">
+                <summary className="cursor-pointer font-display text-[11.5px] text-ink">
+                  特工角色卡<span className="ml-1.5 font-mono text-[9.5px] text-faint">任务发射时作为 system 上下文注入</span>
+                </summary>
+                <textarea
+                  value={roleDrafts[cfg.agent] ?? roles[cfg.agent] ?? ''}
+                  onChange={(e) => setRoleDrafts((p) => ({ ...p, [cfg.agent]: e.target.value }))}
+                  rows={3}
+                  placeholder={agent === 'claude' ? '你是「小克」,工程编排担当…' : '角色设定…'}
+                  className="comic-input mt-2 w-full resize-y text-[11.5px]"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    void api
+                      .saveRole(cfg.agent, roleDrafts[cfg.agent] ?? roles[cfg.agent] ?? '')
+                      .then(() => refresh())
+                      .catch(() => undefined);
+                  }}
+                  className="comic-btn mt-1.5 bg-yellow px-2.5 py-1 font-mono text-[10.5px] text-ink"
+                >
+                  保存角色卡
+                </button>
+              </details>
 
               {/* 预设管理 */}
               {fields.length > 0 && (

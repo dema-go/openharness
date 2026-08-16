@@ -123,3 +123,15 @@
 - [x] 6.6 #6 Supervisor 按反馈建议暂缓,记入 Roadmap v0.7 候选
 - [x] 6.7 全量验证:test/typecheck/build/check:dates + 截图/GIF 核验
 - [x] 6.8 回标 6 条 + CHANGELOG + commit + push
+
+## 第 7 轮:2026-08-16 用户反馈(第 5 轮:对标 Clowder AI 的 7 条借鉴项)
+
+- [x] 7.1 #3 角色卡:RoleStore + 发射注入(发射台/对话室)+ 配置页编辑器 + 单测
+- [x] 7.2 #5 共享记忆:MemoryStore(200 条裁剪)+ 记一笔 UI + 摘要注入最近 3 条 + 单测
+- [x] 7.3 #1 @mention 路由:别名解析(中英文)+ 多特工派发,实测选中小克时 @鲸酱 正确路由
+- [x] 7.4 #2 送评审:助手气泡按钮 + 特工选择 + 评审指令派发
+- [x] 7.5 #4 富文本:mermaid(直载 vendor ESM,修复 Rollup default 导出丢失)+ KaTeX 懒加载 + 代码块复制按钮 + 5 项单测
+- [x] 7.6 #6 费用看板:价目表 store/API + 用量页估算卡 + 可配置 UI
+- [x] 7.7 #7 阶段标签:DB 迁移 + 列表贴纸 + 会话头部切换(最小版)
+- [x] 7.8 全量验证:48 项测试 + typecheck/build + 浏览器逐项核验 + 真实任务(@mention)
+- [x] 7.9 回标 7 条 + CHANGELOG + README + commit + push

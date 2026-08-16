@@ -7,11 +7,14 @@ import { execFile } from 'node:child_process';
 import { createNodeWebSocket, type NodeWebSocket } from '@hono/node-ws';
 import { Hono } from 'hono';
 import type { WSContext } from 'hono/ws';
-import type { AgentAdapter, AgentStatus, HarnessEvent, TaskInfo } from '@openharness/core';
-import { AGENT_DISPLAY, EVENT_KIND_LABEL } from '@openharness/core';
+import type { AgentAdapter, AgentStatus, ConversationStage, HarnessEvent, TaskInfo } from '@openharness/core';
+import { AGENT_DISPLAY, CONVERSATION_STAGE_LABEL, EVENT_KIND_LABEL } from '@openharness/core';
 import { onMessage, type BusMessage } from './bus.js';
 import type { ConversationManager } from './conversations.js';
+import type { MemoryStore } from './memory.js';
 import type { PresetStore } from './presets.js';
+import type { PricingStore } from './pricing.js';
+import type { RoleStore } from './roles.js';
 import type { Store } from './store.js';
 import { suggest, type Suggestion } from './suggest.js';
 import type { TaskManager } from './tasks.js';
@@ -21,6 +24,9 @@ export interface AppDeps {
   store: Store;
   tasks: TaskManager;
   presets: PresetStore;
+  pricing: PricingStore;
+  roles: RoleStore;
+  memory: MemoryStore;
   conversations: ConversationManager;
   getAdapter: (agent: TaskInfo['agent']) => AgentAdapter | undefined;
   getStatuses: () => AgentStatus[];
@@ -28,7 +34,7 @@ export interface AppDeps {
 }
 
 export function createApp(deps: AppDeps): { app: Hono; nodeWs: NodeWebSocket } {
-  const { store, tasks, presets, conversations, getAdapter, getStatuses, enabledAgents } = deps;
+  const { store, tasks, presets, pricing, roles, memory, conversations, getAdapter, getStatuses, enabledAgents } = deps;
   const app = new Hono();
   const nodeWs = createNodeWebSocket({ app });
 
@@ -120,7 +126,9 @@ export function createApp(deps: AppDeps): { app: Hono; nodeWs: NodeWebSocket } {
     const adapter = getAdapter(agent)!;
     const opts = {
       cwd: body.cwd,
-      prompt: body.prompt.trim(),
+      // 角色卡注入(持久身份):发射台任务同样生效
+      prompt: roles.inject(agent, body.prompt.trim()),
+      displayPrompt: body.prompt.trim(),
       model: body.model,
       bypassPermissions: body.bypassPermissions === true,
       conversationId: typeof body.conversationId === 'string' ? body.conversationId : undefined,
@@ -238,6 +246,48 @@ export function createApp(deps: AppDeps): { app: Hono; nodeWs: NodeWebSocket } {
 
   app.delete('/api/presets/:id', (c) => {
     if (!presets.delete(c.req.param('id'))) return c.json({ error: '预设不存在' }, 404);
+    return c.json({ ok: true });
+  });
+
+  // ---- 价目表(费用估算) ----
+  app.get('/api/pricing', (c) => c.json(pricing.get()));
+
+  app.put('/api/pricing', async (c) => {
+    const body = await c.req.json<{ models?: Record<string, { input: number; output: number }>; default?: { input: number; output: number } }>();
+    pricing.set({ models: body.models ?? {}, default: body.default ?? pricing.get().default });
+    return c.json({ ok: true });
+  });
+
+  // ---- 对话阶段标签(特性生命周期最小版) ----
+  app.put('/api/conversations/:id/stage', async (c) => {
+    const body = await c.req.json<{ stage?: string }>();
+    const stage = body.stage as ConversationStage | undefined;
+    if (!stage || !CONVERSATION_STAGE_LABEL[stage]) return c.json({ error: '未知的阶段' }, 400);
+    const conv = store.getConversation(c.req.param('id'));
+    if (!conv) return c.json({ error: '对话不存在' }, 404);
+    store.setConversationStage(conv.id, stage, Date.now());
+    return c.json({ ok: true, stage });
+  });
+
+  // ---- 特工角色卡(持久身份) ----
+  app.get('/api/roles', (c) => c.json(roles.all()));
+
+  app.put('/api/roles/:agent', async (c) => {
+    const agent = c.req.param('agent') as TaskInfo['agent'];
+    if (!AGENT_DISPLAY[agent]) return c.json({ error: '未知的 Agent' }, 400);
+    const body = await c.req.json<{ text?: string }>();
+    if (typeof body.text !== 'string') return c.json({ error: 'text 为必填' }, 400);
+    roles.set(agent, body.text);
+    return c.json({ ok: true });
+  });
+
+  // ---- 团队共享记忆 ----
+  app.get('/api/memory', (c) => c.json({ text: memory.read() }));
+
+  app.post('/api/memory', async (c) => {
+    const body = await c.req.json<{ text?: string }>();
+    if (!body.text?.trim()) return c.json({ error: 'text 为必填' }, 400);
+    memory.append(body.text);
     return c.json({ ok: true });
   });
 

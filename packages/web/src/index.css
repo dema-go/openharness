@@ -296,3 +296,43 @@
 }
 .md-body img { max-width: 100%; border-radius: 6px; }
 .md-body strong { color: #221d15; }
+
+/* ---- 代码块复制按钮 / mermaid 容器 ---- */
+.md-codeblock {
+  position: relative;
+}
+.md-codeblock .md-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  font-family: var(--font-mono), "IBM Plex Mono", monospace;
+  font-size: 10px;
+  background: #fff;
+  color: #221d15;
+  border: 2px solid #221d15;
+  border-radius: 6px;
+  padding: 1px 8px;
+  cursor: pointer;
+  box-shadow: 1.5px 1.5px 0 rgba(34, 29, 21, 0.35);
+}
+.md-codeblock .md-copy:hover {
+  background: #ffe96b;
+}
+.md-mermaid {
+  margin: 0.5em 0;
+  padding: 0.5em;
+  background: #fff;
+  border: 2px dashed rgba(34, 29, 21, 0.5);
+  border-radius: 8px;
+  overflow-x: auto;
+  text-align: center;
+}
+.md-mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+.katex-display {
+  margin: 0.4em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}

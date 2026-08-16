@@ -11,6 +11,7 @@ import type {
   ConversationAgentState,
   ConversationMessage,
   ConversationRole,
+  ConversationStage,
   ConversationSummary,
   CursorStore,
   EventKind,
@@ -74,7 +75,8 @@ export class Store implements CursorStore {
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
         created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
+        updated_at INTEGER NOT NULL,
+        stage TEXT NOT NULL DEFAULT 'idea'
       );
       CREATE TABLE IF NOT EXISTS conversation_messages (
         seq INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -107,6 +109,11 @@ export class Store implements CursorStore {
     if (!cols.some((c) => c.name === 'fingerprint')) {
       this.db.exec('ALTER TABLE events ADD COLUMN fingerprint TEXT');
       this.db.exec('CREATE INDEX IF NOT EXISTS idx_events_fingerprint ON events(fingerprint)');
+    }
+    // 迁移:conversations 补 stage 列(特性生命周期阶段)
+    const convCols = this.db.prepare('PRAGMA table_info(conversations)').all() as Array<{ name: string }>;
+    if (!convCols.some((c) => c.name === 'stage')) {
+      this.db.exec("ALTER TABLE conversations ADD COLUMN stage TEXT NOT NULL DEFAULT 'idea'");
     }
   }
 
@@ -473,6 +480,10 @@ export class Store implements CursorStore {
     this.db.prepare('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?').run(title, now, id);
   }
 
+  setConversationStage(id: string, stage: ConversationStage, now: number): void {
+    this.db.prepare('UPDATE conversations SET stage = ?, updated_at = ? WHERE id = ?').run(stage, now, id);
+  }
+
   listConversations(): ConversationSummary[] {
     const rows = this.db
       .prepare(
@@ -488,6 +499,7 @@ export class Store implements CursorStore {
       createdAt: r.created_at as number,
       updatedAt: r.updated_at as number,
       messageCount: r.message_count as number,
+      stage: (r.stage as ConversationStage | null) ?? 'idea',
       lastMessage: (r.last_message as string | null) ?? undefined,
     }));
   }

@@ -6,3 +6,4 @@ dist/
 .env.local
 .server.pid
 server.log
+packages/web/public/vendor/

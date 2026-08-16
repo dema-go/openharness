@@ -13,8 +13,15 @@ function basename(p: string): string {
   return parts[parts.length - 1] ?? p;
 }
 
+interface Pricing {
+  models: Record<string, { input: number; output: number }>;
+  default: { input: number; output: number };
+}
+
 export function UsagePanel(): React.JSX.Element {
   const [report, setReport] = useState<UsageReport | null>(null);
+  const [pricing, setPricing] = useState<Pricing | null>(null);
+  const [priceDrafts, setPriceDrafts] = useState<Record<string, { input: string; output: string }>>({});
   const [range, setRange] = useState<'7' | '14' | '30' | '90' | 'all' | 'custom'>('14');
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [fromDate, setFromDate] = useState(() => {
@@ -42,10 +49,32 @@ export function UsagePanel(): React.JSX.Element {
       .catch(() => {
         if (alive) setReport(null);
       });
+    api
+      .pricing()
+      .then((p) => {
+        if (alive) setPricing(p);
+      })
+      .catch(() => undefined);
     return () => {
       alive = false;
     };
   }, [range, fromDate, toDate, today]);
+
+  // 费用估算(美元):按模型 tokens × 价目表
+  const cost = useMemo(() => {
+    if (!report || !pricing) return null;
+    const byAgent = new Map<string, number>();
+    let total = 0;
+    for (const m of report.byModel) {
+      const price = pricing.models[m.model] ?? pricing.default;
+      const c = (m.input / 1e6) * price.input + (m.output / 1e6) * price.output;
+      total += c;
+      byAgent.set(m.agent, (byAgent.get(m.agent) ?? 0) + c);
+    }
+    return { total, byAgent: [...byAgent.entries()].sort((a, b) => b[1] - a[1]) };
+  }, [report, pricing]);
+
+  const fmtUsd = (n: number): string => (n >= 10 ? `$${n.toFixed(2)}` : `$${n.toFixed(4)}`);
 
   const RANGES: Array<{ id: typeof range; label: string }> = [
     { id: '7', label: '近 7 天' },
@@ -115,6 +144,86 @@ export function UsagePanel(): React.JSX.Element {
         <StatCard label="累计输出 tokens" value={fmtTokens(total.output)} color="#3D8BFF" />
         <StatCard label="工具调用次数" value={toolCalls.toLocaleString()} color="#8B4DFF" />
       </div>
+
+      {cost && (
+        <div className="comic-card mt-4 p-4">
+          <div className="flex flex-wrap items-baseline gap-3">
+            <h3 className="font-display text-[14px] text-ink">费用估算</h3>
+            <span className="font-display text-[22px] tabular-nums text-red">{fmtUsd(cost.total)}</span>
+            <span className="font-mono text-[10px] text-faint">美元 · 按可配置价目表折算(仅估算)</span>
+          </div>
+          {cost.byAgent.length > 0 && (
+            <ul className="mt-2 flex flex-wrap gap-2">
+              {cost.byAgent.map(([a, c]) => (
+                <li key={a} className="rounded-lg border-2 border-ink bg-white px-2.5 py-1 font-mono text-[10.5px] text-dim">
+                  {AGENT_DISPLAY[a as AgentId] ?? a}:<span className="ml-1 text-ink tabular-nums">{fmtUsd(c)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <details className="mt-3">
+            <summary className="cursor-pointer font-mono text-[10.5px] text-faint hover:text-dim">
+              配置价目表(美元 / 百万 tokens)▾
+            </summary>
+            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {pricing &&
+                [...new Set([...Object.keys(pricing.models), ...report.byModel.map((m) => m.model)])].map((model) => {
+                  const price = pricing.models[model] ?? pricing.default;
+                  const d = priceDrafts[model] ?? { input: '', output: '' };
+                  return (
+                    <label key={model} className="block rounded-lg border-2 border-ink bg-white px-2.5 py-2">
+                      <span className="mb-1 block truncate font-mono text-[10.5px] text-dim" title={model}>
+                        {model === '(未知)' ? '默认价(未知模型)' : model}
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={d.input}
+                          onChange={(e) => setPriceDrafts((p) => ({ ...p, [model]: { ...(p[model] ?? { input: '', output: '' }), input: e.target.value } }))}
+                          placeholder={`入 ${price.input}`}
+                          className="comic-input w-24 py-0.5 text-[11px]"
+                        />
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={d.output}
+                          onChange={(e) => setPriceDrafts((p) => ({ ...p, [model]: { ...(p[model] ?? { input: '', output: '' }), output: e.target.value } }))}
+                          placeholder={`出 ${price.output}`}
+                          className="comic-input w-24 py-0.5 text-[11px]"
+                        />
+                        <span className="font-mono text-[9.5px] text-faint">入/出</span>
+                      </span>
+                    </label>
+                  );
+                })}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (!pricing) return;
+                const models = { ...pricing.models };
+                for (const [model, d] of Object.entries(priceDrafts)) {
+                  const input = Number(d.input);
+                  const output = Number(d.output);
+                  if (Number.isFinite(input) && Number.isFinite(output) && (input > 0 || output > 0)) {
+                    models[model] = { input, output };
+                  }
+                }
+                void api.savePricing({ models }).then(() => {
+                  void api.pricing().then(setPricing);
+                  setPriceDrafts({});
+                });
+              }}
+              className="comic-btn mt-2 bg-yellow px-3 py-1 font-mono text-[11px] text-ink"
+            >
+              保存价目表
+            </button>
+          </details>
+        </div>
+      )}
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* 按工具 */}

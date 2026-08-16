@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { ConversationManager } from '../src/conversations.js';
+import { MemoryStore } from '../src/memory.js';
+import { RoleStore } from '../src/roles.js';
 import type { AgentAdapter, HarnessEvent, LaunchOptions, TaskInfo } from '@openharness/core';
 
 // ---- 内存版 Store / TaskManager 桩(与生产接口同构) ----
@@ -55,7 +60,9 @@ function mgr() {
   const store = new FakeStore();
   const tasks = new FakeTasks();
   const adapter = (agent: string) => ({ agentId: agent } as AgentAdapter);
-  return { store, tasks, mgr: new ConversationManager(store as never, tasks as never, adapter as never) };
+  const roles = { inject: (_a: string, p: string) => p } as never;
+  const memory = { recent: () => [] as string[] } as never;
+  return { store, tasks, mgr: new ConversationManager(store as never, tasks as never, adapter as never, roles, memory) };
 }
 
 function ev(taskId: string, convId: string, kind: HarnessEvent['kind'], summary: string, extra: Record<string, unknown> = {}): HarnessEvent {
@@ -125,6 +132,28 @@ describe('ConversationManager 状态机', () => {
     m.handleEvent(ev('t1', conv.id, 'assistant-message', '截断'.repeat(50), { fullText: '完整回复'.repeat(50) }));
     const bubble = store.msgs.find((x) => x.role === 'assistant');
     expect(bubble!.content).toBe('完整回复'.repeat(50));
+  });
+
+  it('角色卡注入最前置;切换时附团队记忆', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'oh-conv-roles-'));
+    try {
+      const store = new FakeStore();
+      const tasks = new FakeTasks();
+      const adapter = (agent: string) => ({ agentId: agent } as AgentAdapter);
+      const roles = new RoleStore(path.join(dir, 'roles.json'));
+      const memory = new MemoryStore(path.join(dir, 'memory.md'));
+      memory.append('跨会话经验:提交前必须跑 typecheck');
+      const m = new ConversationManager(store as never, tasks as never, adapter as never, roles, memory);
+      const conv = m.create({});
+      await m.send(conv.id, '第一条消息', 'claude', '/tmp');
+      expect(tasks.launched[0]!.prompt).toContain('[角色设定] 你是「小克」');
+      // 切到 dsh:注入摘要应含团队记忆
+      await m.send(conv.id, '换个思路', 'dsh', '/tmp');
+      expect(tasks.launched[1]!.prompt).toContain('[团队记忆(最近)]');
+      expect(tasks.launched[1]!.prompt).toContain('提交前必须跑 typecheck');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('task-start 早于登记时不产生重复气泡', async () => {

@@ -12,7 +12,10 @@ import { AGENT_DISPLAY, AGENT_IDS } from '@openharness/core';
 import { ClaudeAdapter, CodexAdapter, DshAdapter, CursorAdapter } from '@openharness/agents';
 import { broadcast, onMessage } from './bus.js';
 import { ConversationManager } from './conversations.js';
+import { MemoryStore } from './memory.js';
 import { PresetStore } from './presets.js';
+import { PricingStore } from './pricing.js';
+import { RoleStore } from './roles.js';
 import { createApp } from './routes.js';
 import { Store } from './store.js';
 import { TaskManager } from './tasks.js';
@@ -115,7 +118,9 @@ async function main(): Promise<void> {
 
   const tasks = new TaskManager(pipeline, store, notifyEnabled);
   await tasks.recover();
-  conversations = new ConversationManager(store, tasks, (a) => adapters.get(a));
+  const roles = new RoleStore();
+  const memory = new MemoryStore();
+  conversations = new ConversationManager(store, tasks, (a) => adapters.get(a), roles, memory);
 
   // ---- 一次性迁移:重建 codex/cursor 会话索引 ----
   // codex:response_item 记录不含 session_id(payload.id 为条目 ID),旧解析器
@@ -189,6 +194,9 @@ async function main(): Promise<void> {
     store,
     tasks,
     presets: new PresetStore(),
+    pricing: new PricingStore(),
+    roles,
+    memory,
     conversations,
     getAdapter: (a) => adapters.get(a),
     getStatuses: () => statuses,

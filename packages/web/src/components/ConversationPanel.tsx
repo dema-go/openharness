@@ -5,12 +5,20 @@ import type {
   ConversationSummary,
   TaskInfo,
 } from '@openharness/core';
-import { AGENT_DISPLAY } from '@openharness/core';
+import { AGENT_DISPLAY, CONVERSATION_STAGES, CONVERSATION_STAGE_LABEL, type ConversationStage } from '@openharness/core';
 import { api } from '../lib/api';
-import { renderMarkdown } from '../lib/markdown';
 import { AGENT_CHARACTER, AgentAvatar, Squiggle } from './ComicIcons';
+import { MdBody } from './MdBody';
 
 const NO_RESUME_AGENTS: AgentId[] = ['dsh'];
+
+const STAGE_STICKER: Record<ConversationStage, string> = {
+  idea: 'bg-white',
+  spec: 'bg-orange',
+  'in-progress': 'bg-red text-white',
+  review: 'bg-purple text-white',
+  done: 'bg-green text-white',
+};
 
 function fmtTime(ts: number): string {
   return new Intl.DateTimeFormat('zh-CN', {
@@ -232,26 +240,89 @@ export function ConversationPanel(props: {
     }
   };
 
+  /** @mention 别名 → AgentId(Clowder 式显式路由) */
+  const MENTION_ALIASES: Record<string, AgentId> = {
+    小克: 'claude', 光标侠: 'cursor', 码星人: 'codex', 鲸酱: 'dsh',
+    claude: 'claude', cursor: 'cursor', codex: 'codex', dsh: 'dsh',
+  };
+
+  /** 解析消息中的 @特工名,返回去重后的目标与去 @ 后的正文 */
+  const parseMentions = (text: string): { targets: AgentId[]; clean: string } => {
+    const found = new Set<AgentId>();
+    const clean = text.replace(/@([^\s@,，。:：]+)/g, (m, name: string) => {
+      const id = MENTION_ALIASES[name] ?? MENTION_ALIASES[name.toLowerCase()];
+      if (id) found.add(id);
+      return '';
+    });
+    return { targets: [...found], clean: clean.replace(/\s{2,}/g, ' ').trim() };
+  };
+
   const send = async () => {
     const text = input.trim();
     if (!activeId || !text || !cwd.trim() || sending || running) return;
     setSending(true);
     setError(null);
     try {
-      const { message, task } = await api.sendConversationMessage(activeId, {
-        content: text,
-        agent,
-        cwd: cwd.trim(),
-        bypassPermissions: bypass,
-      });
-      addMessage(message);
-      onTask(task);
+      const { targets, clean } = parseMentions(text);
+      const to = targets.length > 0 ? targets : [agent];
+      const content = clean || text; // 全是 @ 时按原文本发送
+      for (const a of to) {
+        const { message, task } = await api.sendConversationMessage(activeId, {
+          content,
+          agent: a,
+          cwd: cwd.trim(),
+          bypassPermissions: bypass,
+        });
+        addMessage(message);
+        onTask(task);
+      }
+      if (targets.length > 1) {
+        // 多特工派发提示(消息气泡之外的一条说明)
+        const names = targets.map((a) => AGENT_CHARACTER[a].name).join('、');
+        setError(`已同时派发给:${names}`);
+      }
       setInput('');
       scrollToBottom();
     } catch (err) {
       setError(err instanceof Error ? err.message : '发送失败');
     } finally {
       setSending(false);
+    }
+  };
+
+  /** 送评审:把一个特工的产出交给另一个特工评审(切换触发摘要注入) */
+  const [reviewFor, setReviewFor] = useState<number | null>(null);
+
+  const sendReview = async (reviewer: AgentId) => {
+    setReviewFor(null);
+    if (!activeId || sending || running) return;
+    setSending(true);
+    setError(null);
+    try {
+      const { message, task } = await api.sendConversationMessage(activeId, {
+        content: '请评审本对话最近的特工产出,重点输出:正确性、潜在风险、改进建议(结构化列出)。',
+        agent: reviewer,
+        cwd: cwd.trim(),
+        bypassPermissions: bypass,
+      });
+      addMessage(message);
+      onTask(task);
+      scrollToBottom();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '评审派发失败');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const addMemoryNote = async () => {
+    const text = window.prompt('记一笔到团队记忆(跨会话共享的经验/结论):');
+    if (!text?.trim()) return;
+    try {
+      await api.addMemory(text.trim());
+      setError('已记入团队记忆 ✓');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '记一笔失败');
     }
   };
 
@@ -326,6 +397,24 @@ export function ConversationPanel(props: {
           <h2 className="font-display text-[15px] text-ink">对话室</h2>
           {active && <span className="min-w-0 truncate font-mono text-[11px] text-faint">{active.title}</span>}
           <div className="ml-auto flex items-center gap-2">
+            {active && (
+              <select
+                value={active.stage}
+                onChange={(e) => {
+                  const stage = e.target.value as ConversationStage;
+                  void api.setConversationStage(active.id, stage).then(() => void loadConversations());
+                  setConvs((prev) => (prev ? prev.map((c) => (c.id === active.id ? { ...c, stage } : c)) : prev));
+                }}
+                title="特性生命周期阶段"
+                className="comic-input w-auto py-0.5 font-mono text-[10.5px]"
+              >
+                {CONVERSATION_STAGES.map((st) => (
+                  <option key={st} value={st}>
+                    {CONVERSATION_STAGE_LABEL[st]}
+                  </option>
+                ))}
+              </select>
+            )}
             <label className="flex cursor-pointer items-center gap-1" title="自动渲染 Agent 回复中的 Markdown">
               <input
                 type="checkbox"
@@ -372,7 +461,7 @@ export function ConversationPanel(props: {
             ) : (
               <ul className="space-y-2.5">
                 {msgs.map((m) => (
-                  <MessageBubble key={m.seq} m={m} mdRender={mdRender} />
+                  <MessageBubble key={m.seq} m={m} mdRender={mdRender} onReview={m.role === 'assistant' ? () => setReviewFor(m.seq) : undefined} reviewOpen={reviewFor === m.seq} onReviewWith={(a) => void sendReview(a)} />
                 ))}
                 {sending && (
                   <li className="flex items-center gap-2">
@@ -448,7 +537,16 @@ export function ConversationPanel(props: {
             </datalist>
           </div>
           {error && <p className="mb-2 text-[11.5px] text-red">💥 {error}</p>}
-          <label className="mb-2 flex cursor-pointer items-center gap-2" title="跳过所有权限确认:特工直接执行命令与文件写入,可能误删文件,仅用于可信目录">
+          <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <button
+            type="button"
+            onClick={() => void addMemoryNote()}
+            className="font-mono text-[10.5px] text-blue hover:underline"
+            title="追加一条经验/结论到团队记忆,跨会话共享"
+          >
+            ✎ 记一笔
+          </button>
+          <label className="flex cursor-pointer items-center gap-2" title="跳过所有权限确认:特工直接执行命令与文件写入,可能误删文件,仅用于可信目录">
             <input
               type="checkbox"
               checked={bypass}
@@ -465,6 +563,7 @@ export function ConversationPanel(props: {
             <span className="font-mono text-[10.5px] text-red">完全自主(跳过所有确认,危险)</span>
             {agent === 'dsh' && <span className="font-mono text-[9.5px] text-faint">DSH 由 settings.yaml 权限预设控制</span>}
           </label>
+          </div>
           <div className="flex items-end gap-2">
             <textarea
               value={input}
@@ -494,8 +593,14 @@ export function ConversationPanel(props: {
   );
 }
 
-function MessageBubble(props: { m: ConversationMessage; mdRender: boolean }): React.JSX.Element {
-  const { m, mdRender } = props;
+function MessageBubble(props: {
+  m: ConversationMessage;
+  mdRender: boolean;
+  onReview?: () => void;
+  reviewOpen?: boolean;
+  onReviewWith?: (agent: AgentId) => void;
+}): React.JSX.Element {
+  const { m, mdRender, onReview, reviewOpen, onReviewWith } = props;
   if (m.role === 'system' || m.role === 'task') {
     return (
       <li className="flex justify-center">
@@ -505,12 +610,7 @@ function MessageBubble(props: { m: ConversationMessage; mdRender: boolean }): Re
       </li>
     );
   }
-  const body = mdRender ? (
-    <div
-      className="md-body mt-0.5 text-[13px] leading-relaxed text-ink"
-      dangerouslySetInnerHTML={{ __html: renderMarkdown(m.content) }}
-    />
-  ) : (
+  const body = mdRender ? <MdBody text={m.content} /> : (
     <p className="mt-0.5 whitespace-pre-wrap break-words text-[13px] leading-relaxed text-ink">{m.content}</p>
   );
   if (m.role === 'user') {
@@ -533,6 +633,31 @@ function MessageBubble(props: { m: ConversationMessage; mdRender: boolean }): Re
           <span className="ml-1.5 font-mono text-[8.5px] text-faint">({AGENT_DISPLAY[agent]})</span>
         </p>
         {body}
+        {onReview && (
+          <div className="mt-1 border-t-2 border-dashed border-faint/40 pt-1">
+            {reviewOpen && onReviewWith ? (
+              <div className="flex flex-wrap items-center gap-1">
+                <span className="font-mono text-[9px] text-faint">交给谁评审?</span>
+                {(['claude', 'cursor', 'codex', 'dsh'] as const)
+                  .filter((a) => a !== (m.agent ?? 'dsh'))
+                  .map((a) => (
+                    <button
+                      key={a}
+                      type="button"
+                      onClick={() => onReviewWith(a)}
+                      className="rounded-md border-2 border-ink bg-white px-1.5 py-0.5 font-display text-[10px] text-ink hover:bg-panel2"
+                    >
+                      {AGENT_CHARACTER[a].name}
+                    </button>
+                  ))}
+              </div>
+            ) : (
+              <button type="button" onClick={onReview} className="font-mono text-[9.5px] text-blue hover:underline">
+                🕵 送评审
+              </button>
+            )}
+          </div>
+        )}
         <p className="mt-1 text-right font-mono text-[9px] text-faint">{fmtTime(m.createdAt)}</p>
       </div>
     </li>
@@ -579,7 +704,10 @@ function ConversationList(props: {
                   style={{ boxShadow: activeId === c.id ? '2px 2px 0 #221D15' : undefined }}
                 >
                   <span className="flex items-baseline justify-between gap-2">
-                    <span className="truncate font-display text-[12px] text-ink">{c.title}</span>
+                    <span className="min-w-0 truncate font-display text-[12px] text-ink">{c.title}</span>
+                    <span className={`shrink-0 rounded border-2 border-ink px-1 font-mono text-[8px] ${STAGE_STICKER[c.stage ?? 'idea']}`}>
+                      {CONVERSATION_STAGE_LABEL[c.stage ?? 'idea']}
+                    </span>
                     <span className="shrink-0 font-mono text-[9px] text-faint">{c.messageCount}</span>
                   </span>
                   <span className="mt-0.5 block truncate text-[10.5px] text-dim">

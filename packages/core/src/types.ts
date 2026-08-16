@@ -188,12 +188,26 @@ export interface TaskHandle {
 
 // ---- 对话室(会话式连续对话) ----
 
+export type ConversationStage = 'idea' | 'spec' | 'in-progress' | 'review' | 'done';
+
+export const CONVERSATION_STAGES: ConversationStage[] = ['idea', 'spec', 'in-progress', 'review', 'done'];
+
+export const CONVERSATION_STAGE_LABEL: Record<ConversationStage, string> = {
+  idea: '想法',
+  spec: '方案',
+  'in-progress': '进行中',
+  review: '评审',
+  done: '完成',
+};
+
 export interface ConversationSummary {
   id: string;
   title: string;
   createdAt: number;
   updatedAt: number;
   messageCount: number;
+  /** 特性生命周期阶段(对标 Clowder Mission Hub 的最小版) */
+  stage: ConversationStage;
   /** 最近一条消息摘要(列表展示) */
   lastMessage?: string;
 }

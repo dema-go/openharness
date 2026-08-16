@@ -19,6 +19,8 @@ import type {
 } from '@openharness/core';
 import { AGENT_DISPLAY, truncate } from '@openharness/core';
 import { broadcast } from './bus.js';
+import type { MemoryStore } from './memory.js';
+import type { RoleStore } from './roles.js';
 import type { Store } from './store.js';
 import type { TaskManager } from './tasks.js';
 
@@ -40,6 +42,8 @@ export class ConversationManager {
     private readonly store: Store,
     private readonly tasks: TaskManager,
     private readonly getAdapter: (agent: AgentId) => AgentAdapter | undefined,
+    private readonly roles: RoleStore,
+    private readonly memory: MemoryStore,
   ) {}
 
   /** 新建对话;可选从某原生会话接续(会话档案「对话室续聊」) */
@@ -114,6 +118,8 @@ export class ConversationManager {
       const summary = this.injectSummary(convId);
       if (summary) prompt = `${summary}\n\n[本轮消息] ${text}`;
     }
+    // 角色卡(持久身份)注入:最前置,只此一次
+    prompt = this.roles.inject(agent, prompt);
 
     const userMsg = this.pushMessage(convId, { agent, role: 'user', content: text });
     const task = await this.tasks.start(adapter, {
@@ -219,6 +225,9 @@ export class ConversationManager {
     });
     // 跨 Agent 派活约定:走本机 OpenHarness API 且带上 conversationId,结果才能回流本对话
     const delegation = `\n[协作约定] 如需给其他特工派活,请调用本机 API:POST http://127.0.0.1:3900/api/tasks,body 为 {"agent":"claude|codex|cursor|dsh","cwd":"<工作目录>","prompt":"<任务>","bypassPermissions":true,"conversationId":"${convId}"}(conversationId 必带,任务结果才能回到本对话)。`;
-    return `[对话背景] 以下是本对话此前的交流摘要,请基于它继续回答,不要复述背景:\n${lines.join('\n')}${delegation}`;
+    // 团队共享记忆:附最近几条经验沉淀
+    const memory = this.memory.recent(3);
+    const memoryPart = memory.length ? `\n[团队记忆(最近)] ${memory.join(' | ')}` : '';
+    return `[对话背景] 以下是本对话此前的交流摘要,请基于它继续回答,不要复述背景:\n${lines.join('\n')}${delegation}${memoryPart}`;
   }
 }
