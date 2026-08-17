@@ -308,9 +308,9 @@ README 首屏增加“项目定位 + 架构图 + 在线演示/GIF + 快速启动
 
 ### 1. 跨 Agent 派活的安全与可靠性缺口
 
-问题现象:审查「协作约定」派活链路(packages/server/src/conversations.ts:220-222)发现四个具体缺口:
+问题现象:审查「协作约定」派活链路(packages/server/src/conversations.ts:227)发现四个具体缺口:
 
-1. 注入的协作约定硬编码 `"bypassPermissions":true`——用户在 UI 未勾选「完全自主」,但 Agent 间互派的子任务默认全自主执行,违背「完全自主类开关默认关闭」红线;且 tasks 表不存该字段(store.ts:62-72),事后无从追溯哪些任务跑在自主模式;
+1. 注入的协作约定硬编码 `"bypassPermissions":true`——用户在 UI 未勾选「完全自主」,但 Agent 间互派的子任务默认全自主执行,违背「完全自主类开关默认关闭」红线;且 tasks 表不存该字段(store.ts:63-73),事后无从追溯哪些任务跑在自主模式;
 2. 协作约定硬编码端口 `3900`,修改 `OPENHARNESS_PORT` 后约定指向的 API 失效;
 3. `/api/tasks` 无鉴权,本机任意进程可发起全自主任务(与仅监听 127.0.0.1 的定位勉强自洽,但调用方式被注入进发给任意 LLM 的 prompt,攻击面被放大);
 4. `queue=true` 的任务出队接续时只带 `{cwd, prompt}`(packages/server/src/tasks.ts:192),丢失 `conversationId / resumeSessionId / bypassPermissions`,且 prompt 被替换为展示文案(tasks.ts:125)——带 conversationId 的派活一旦撞上该 Agent 正忙而排队,结果回流归因直接断链。
@@ -352,7 +352,7 @@ README 首屏增加“项目定位 + 架构图 + 在线演示/GIF + 快速启动
 
 
 
-## 第 5 轮(2026-08-16)
+## 第 6 轮(2026-08-16)
 
 > 状态:✅ 已完成(v0.6.0)
 > 来源:对标 Clowder AI(github.com/zts212653/clowder-ai)后,筛选出可直接借鉴、且不违背"本地优先/一个页面/轻依赖"原则的部分。
@@ -414,7 +414,7 @@ README 首屏增加“项目定位 + 架构图 + 在线演示/GIF + 快速启动
 > ✅ v0.6.0 交付(最小版):对话支持阶段标签(想法/方案/进行中/评审/完成)——列表项阶段贴纸 + 会话头部下拉切换,持久化到数据库;「Agent 可建议」与「活动流按阶段筛选」暂缓(需要事件↔对话阶段映射的 schema 变更,与 Need Audit/公告板同批评估)。
 
 
-## 第 6 轮(2026-08-16)
+## 第 7 轮(2026-08-17)
 
 > 状态:✅ 已完成(v0.6.1)
 

@@ -124,7 +124,7 @@
 - [x] 6.7 全量验证:test/typecheck/build/check:dates + 截图/GIF 核验
 - [x] 6.8 回标 6 条 + CHANGELOG + commit + push
 
-## 第 7 轮:2026-08-16 用户反馈(第 5 轮:对标 Clowder AI 的 7 条借鉴项)
+## 第 7 轮:2026-08-16 用户反馈(第 6 轮:对标 Clowder AI 的 7 条借鉴项)
 
 - [x] 7.1 #3 角色卡:RoleStore + 发射注入(发射台/对话室)+ 配置页编辑器 + 单测
 - [x] 7.2 #5 共享记忆:MemoryStore(200 条裁剪)+ 记一笔 UI + 摘要注入最近 3 条 + 单测
