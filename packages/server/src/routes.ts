@@ -404,14 +404,24 @@ export function createApp(deps: AppDeps): { app: Hono; nodeWs: NodeWebSocket } {
   });
 
   app.post('/api/supervisor/runs', async (c) => {
-    const body = await c.req.json<{ goal?: string; cwd?: string; mode?: 'hitl' | 'auto' }>();
+    const body = await c.req.json<{
+      goal?: string;
+      cwd?: string;
+      mode?: 'hitl' | 'auto';
+      bypassPermissions?: boolean;
+    }>();
     if (!body.goal?.trim()) return c.json({ error: 'goal 为必填' }, 400);
     if (!body.cwd?.trim() || !existsSync(body.cwd) || !statSync(body.cwd).isDirectory()) {
       return c.json({ error: `目录不存在:${body.cwd ?? ''}` }, 400);
     }
     const mode = body.mode === 'auto' ? 'auto' : 'hitl';
     try {
-      const run = await supervisor.start({ goal: body.goal, cwd: body.cwd, mode });
+      const run = await supervisor.start({
+        goal: body.goal,
+        cwd: body.cwd,
+        mode,
+        bypassPermissions: body.bypassPermissions === true,
+      });
       return c.json(run, 201);
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : '发起失败' }, 400);

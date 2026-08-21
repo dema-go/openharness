@@ -3,11 +3,23 @@
  * 消息按类型分发给回调;断线状态通过 connected 暴露。
  */
 import { useEffect, useRef, useState } from 'react';
-import type { AgentStatus, ConversationMessage, HarnessEvent, TaskInfo } from '@openharness/core';
+import type {
+  AgentStatus,
+  ConversationMessage,
+  HarnessEvent,
+  SupervisorRunRecord,
+  SupervisorStepRecord,
+  TaskInfo,
+} from '@openharness/core';
 
 export interface BusMessage {
-  type: 'event' | 'status' | 'task' | 'conversation';
-  data: HarnessEvent | AgentStatus[] | TaskInfo | { convId: string; message: ConversationMessage };
+  type: 'event' | 'status' | 'task' | 'conversation' | 'supervisor';
+  data:
+    | HarnessEvent
+    | AgentStatus[]
+    | TaskInfo
+    | { convId: string; message: ConversationMessage }
+    | { run: SupervisorRunRecord; steps?: SupervisorStepRecord[] };
 }
 
 export function useBus(handlers: {
@@ -15,6 +27,7 @@ export function useBus(handlers: {
   onStatus: (s: AgentStatus[]) => void;
   onTask: (t: TaskInfo) => void;
   onConversation: (d: { convId: string; message: ConversationMessage }) => void;
+  onSupervisor?: (d: { run: SupervisorRunRecord; steps?: SupervisorStepRecord[] }) => void;
 }): boolean {
   const [connected, setConnected] = useState(false);
   const handlersRef = useRef(handlers);
@@ -39,6 +52,9 @@ export function useBus(handlers: {
           else if (msg.type === 'conversation') {
             const d = msg.data as { convId: string; message: ConversationMessage };
             if (d.convId) h.onConversation(d);
+          } else if (msg.type === 'supervisor') {
+            const d = msg.data as { run: SupervisorRunRecord; steps?: SupervisorStepRecord[] };
+            if (d.run?.id) h.onSupervisor?.(d);
           }
         } catch {
           /* 忽略坏消息 */

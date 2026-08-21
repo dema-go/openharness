@@ -184,6 +184,63 @@ describe('SupervisorManager 全链路', () => {
     expect(final.error).toContain('拒绝');
   });
 
+  it('hitl:带修订批准 → goal 与计划同步更新并按修订执行', async () => {
+    const { mgr, store, tasks } = makeManager([
+      toolCallResponse('submit_plan', { steps: [planStep] }),
+      // 修订步骤 autoCheck:true → 不消耗验收调用,此处直接是收尾报告
+      textResponse('## 结果摘要\n按修订计划完成。'),
+    ]);
+    const run = await mgr.start({ goal: '完成原始目标', cwd: '/tmp', mode: 'hitl' });
+    await new Promise((res) => setTimeout(res, 30));
+
+    const revised = {
+      goal: '完成修订目标',
+      steps: [
+        {
+          id: 's1',
+          title: '修订后的步骤',
+          agent: 'codex' as const,
+          prompt: '修订后的执行内容',
+          acceptanceCheck: '修订验收标准',
+          autoCheck: true,
+        },
+      ],
+    };
+    await mgr.approve(run.id, 'approve', revised);
+    const final = await waitFor(mgr, run.id);
+    expect(final.state).toBe('done');
+    // 回归断言:goal 与 plan 均为修订版(曾出现 goal 停留旧值导致报告口径错位)
+    expect(final.goal).toBe('完成修订目标');
+    expect(final.plan?.steps[0].title).toBe('修订后的步骤');
+    expect(tasks.launched[0].agent).toBe('codex');
+    expect(tasks.launched[0].opts.prompt).toContain('修订后的执行内容');
+    // 持久化层同步
+    expect(store.getSupervisorRun(run.id)?.goal).toBe('完成修订目标');
+  });
+
+  it('bypassPermissions:run 级开关透传到 Worker 派发', async () => {
+    const { mgr, tasks } = makeManager([
+      toolCallResponse('submit_plan', { steps: [{ ...planStep, autoCheck: true }] }),
+      textResponse('报告'),
+    ]);
+    const run = await mgr.start({ goal: '完成自主', cwd: '/tmp', mode: 'auto', bypassPermissions: true });
+    const final = await waitFor(mgr, run.id);
+    expect(final.state).toBe('done');
+    expect(final.bypassPermissions).toBe(true);
+    expect(tasks.launched[0].opts.bypassPermissions).toBe(true);
+
+    // 默认关:不透传
+    const { mgr: mgr2, tasks: tasks2 } = makeManager([
+      toolCallResponse('submit_plan', { steps: [{ ...planStep, autoCheck: true }] }),
+      textResponse('报告'),
+    ]);
+    const run2 = await mgr2.start({ goal: '完成保守', cwd: '/tmp', mode: 'auto' });
+    const final2 = await waitFor(mgr2, run2.id);
+    expect(final2.state).toBe('done');
+    expect(final2.bypassPermissions).toBe(false);
+    expect(tasks2.launched[0].opts.bypassPermissions).toBe(false);
+  });
+
   it('auto 模式:跳过门禁直接执行', async () => {
     const { mgr, tasks } = makeManager([
       toolCallResponse('submit_plan', { steps: [{ ...planStep, autoCheck: true }] }),

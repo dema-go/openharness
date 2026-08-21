@@ -5,6 +5,8 @@ import type {
   ConversationMessage,
   HarnessEvent,
   SessionSummary,
+  SupervisorRunRecord,
+  SupervisorStepRecord,
   TaskInfo,
 } from '@openharness/core';
 import { AGENT_DISPLAY } from '@openharness/core';
@@ -13,6 +15,7 @@ import { AgentCard } from './components/AgentCard';
 import { ConfigPanel } from './components/ConfigPanel';
 import { ConversationPanel } from './components/ConversationPanel';
 import { Launcher } from './components/Launcher';
+import { OrchestratePanel } from './components/OrchestratePanel';
 import { SessionsPanel } from './components/SessionsPanel';
 import { TopBar } from './components/TopBar';
 import { UsagePanel } from './components/UsagePanel';
@@ -23,6 +26,7 @@ const MAX_EVENTS = 500;
 const MAX_CONV_LIVE = 300;
 const ORDER: AgentId[] = ['claude', 'cursor', 'codex', 'dsh'];
 const TABS = [
+  { id: 'orchestrate', label: '编排' },
   { id: 'feed', label: '实时活动流' },
   { id: 'conversations', label: '对话室' },
   { id: 'sessions', label: '会话档案' },
@@ -38,11 +42,20 @@ export function App(): React.JSX.Element {
   const [projectDirs, setProjectDirs] = useState<string[]>([]);
   const [paused, setPaused] = useState(false);
   const [launcherOpen, setLauncherOpen] = useState(false);
-  const [tab, setTab] = useState<'feed' | 'conversations' | 'sessions' | 'usage' | 'config'>('feed');
+  const [tab, setTab] = useState<'orchestrate' | 'feed' | 'conversations' | 'sessions' | 'usage' | 'config'>('feed');
   const [convLive, setConvLive] = useState<Array<{ convId: string; message: ConversationMessage }>>([]);
   const [pendingConvId, setPendingConvId] = useState<string | null>(null);
+  const [supervisorRuns, setSupervisorRuns] = useState<SupervisorRunRecord[]>([]);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [clock, setClock] = useState('');
   const pulses = useRef<Record<string, number>>({});
+
+  const refreshSupervisorRuns = useCallback(() => {
+    void api
+      .supervisorRuns(30)
+      .then(setSupervisorRuns)
+      .catch(() => undefined);
+  }, []);
 
   const refreshSessions = useCallback(() => {
     void api
@@ -60,7 +73,8 @@ export function App(): React.JSX.Element {
     void api.agents().then(setStatuses).catch(() => undefined);
     void api.tasks().then(setTasks).catch(() => undefined);
     refreshSessions();
-  }, [refreshSessions]);
+    refreshSupervisorRuns();
+  }, [refreshSessions, refreshSupervisorRuns]);
 
   // 时钟
   useEffect(() => {
@@ -108,7 +122,29 @@ export function App(): React.JSX.Element {
     });
   }, []);
 
-  const connected = useBus({ onEvent, onStatus, onTask, onConversation });
+  // 编排 run 推送:合并进列表(新 run 插头);终态且非当前选中时桌面通知
+  const onSupervisor = useCallback(
+    (d: { run: SupervisorRunRecord; steps?: SupervisorStepRecord[] }) => {
+      setSupervisorRuns((prev) => {
+        const rest = prev.filter((r) => r.id !== d.run.id);
+        return [d.run, ...rest].slice(0, 30);
+      });
+      const finished = ['done', 'failed', 'stopped'].includes(d.run.state);
+      if (finished && d.run.id !== selectedRunId) {
+        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+          const label = d.run.state === 'done' ? '编排完成' : d.run.state === 'stopped' ? '编排已中止' : '编排失败';
+          try {
+            new Notification(`${label} · 指挥官`, { body: d.run.goal.slice(0, 120) });
+          } catch {
+            /* 通知不可用 */
+          }
+        }
+      }
+    },
+    [selectedRunId],
+  );
+
+  const connected = useBus({ onEvent, onStatus, onTask, onConversation, onSupervisor });
 
   /** 会话档案「对话室续聊」:创建/绑定对话并跳转 */
   const resumeInConversation = useCallback(
@@ -192,7 +228,18 @@ export function App(): React.JSX.Element {
           </div>
           {/* flex 容器必须加 flex:否则面板根节点(flex-1)无法被高度约束,长内容把整页撑爆 */}
           <div className="flex min-h-0 flex-1">
-            {tab === 'feed' ? (
+            {tab === 'orchestrate' ? (
+              <OrchestratePanel
+                projectDirs={projectDirs}
+                runs={supervisorRuns}
+                selectedId={selectedRunId}
+                onSelect={setSelectedRunId}
+                onStarted={(run) => {
+                  setSupervisorRuns((prev) => [run, ...prev.filter((r) => r.id !== run.id)].slice(0, 30));
+                  setSelectedRunId(run.id);
+                }}
+              />
+            ) : tab === 'feed' ? (
               <ActivityFeed
                 liveEvents={events}
                 paused={paused}

@@ -313,6 +313,8 @@ export interface SupervisorRunRecord {
   goal: string;
   cwd: string;
   mode: SupervisorMode;
+  /** 派发 Worker 时跳过权限确认(claude --dangerously-skip-permissions 等);hitl 审批通过视同已确认 */
+  bypassPermissions?: boolean;
   state: SupervisorRunState;
   plan: SupervisorPlan | null;
   report: string | null;

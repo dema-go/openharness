@@ -3,7 +3,7 @@
 > **多 Agent 编排与可观测控制台(AI Coding Agent 控制面)** —— 一个页面,管理、操作、监控你的所有 AI 编程 Agent(Cursor · Claude Code · Codex · DeepSeek Harness),保留每个工具的原生特色。
 > v0.7 起,平台自身实现 **Supervisor 编排循环**(直连 LLM API 的 Plan → Dispatch → Observe → Verify → Reflect):把四个 Agent 当作可调度的工具,人在环审批/全自动双模式,全程事件化可观测(设计见 [docs/supervisor-design.md](docs/supervisor-design.md))。
 > Worker 层不重新实现模型层 Agent(Planning / Tool Calling / Runtime 均为工具原生能力);平台解决异构适配、任务生命周期、会话状态、实时观测、安全边界,以及 v0.7 起的**自研编排循环**。
-> 当前版本:**v0.7.0**(变更记录见 [CHANGELOG](CHANGELOG.md))。
+> 当前版本:**v0.7.1**(变更记录见 [CHANGELOG](CHANGELOG.md))。
 
 ## 一分钟演示
 
@@ -51,7 +51,7 @@
 | 实时监控 | 四工具会话文件监听 + 任务流式捕获 + 进程探测,统一活动流(WebSocket 推送) | ✅ |
 | 活动流分页筛选 | 最新在前 + 游标「加载更早」+ 每页 50/100/200 + 10 种事件类型筛选 + 关键词搜索,「↑ 最新」浮钮一键回顶 | ✅ |
 | 任务发射 | 经各工具**原生 CLI** 启动(`claude -p` / `codex exec` / `cursor-agent` / `dsh --profile headless`),保留 hooks/sandbox/plan 等全部原生能力;可选「完全自主」跳过所有权限确认(claude `--dangerously-skip-permissions` / codex `--dangerously-bypass-approvals-and-sandbox` / cursor `--yolo --sandbox disabled`) | ✅ |
-| **Supervisor 编排** | **平台自身 Agent 循环**(v0.7.0,后端闭环):直连 OpenAI 兼容 LLM(默认 DeepSeek)做 规划→[人在环审批]→派发 Worker→LLM 验收→重试/重规划→汇总报告;dispatch/query/memory 四工具带 schema 校验;Token 预算/轮次/重试/超时硬边界;run/step 持久化 + 重启恢复;编排 UI 见 Roadmap M2 | ✅ 后端 |
+| **Supervisor 编排** | **平台自身 Agent 循环**(v0.7):直连 OpenAI 兼容 LLM(默认 DeepSeek)做 规划→[人在环审批]→派发 Worker→LLM 验收→重试/重规划→汇总报告;dispatch/query/memory 四工具带 schema 校验;Token 预算/轮次/重试/超时硬边界;run/step 持久化 + 重启恢复;编排 Tab 驾驶舱(发起/审批卡/步骤看板/报告)+ 配置页「编排大脑」(v0.7.1) | ✅ |
 | 任务排队 | 勾选「排队执行」,Agent 忙时 FIFO 入队,收尾自动接续 | ✅ |
 | 打断/移除 | 进程组 SIGINT,状态正确归因(stopped vs error) | ✅ |
 | 会话索引 | 4 工具会话统一索引(分页/全量搜索/时间线/统计;cursor 接入搜索库全文轨迹;空会话默认归档) | ✅ |
@@ -110,8 +110,7 @@ pnpm dev:web           # http://127.0.0.1:3901(前端热更新)
 - ✅ v0.4:Markdown 渲染、去重/注入分离、会话档案分页、密钥零片段、移动端响应式
 - ✅ v0.5:自动化测试与 CI、一分钟演示 GIF、作品集深色截图、定位与简历口径统一
 - ✅ v0.6:@mention 路由、送评审、角色卡、mermaid/KaTeX、团队记忆、费用估算、阶段标签
-- ✅ v0.7:Supervisor 编排层 M1——平台自研 Agent 循环(规划/审批/派发/验收/重规划/报告)+ 硬边界 + 持久化恢复
-- v0.7.x:编排 Tab UI(M2:发起/审批卡/步骤看板/报告)、真机 DeepSeek 冒烟
+- ✅ v0.7:Supervisor 编排层——平台自研 Agent 循环(规划/审批/派发/验收/重规划/报告)+ 硬边界 + 持久化恢复;v0.7.1 编排 Tab 驾驶舱(发起/审批/步骤看板/报告)+ 编排大脑配置
 - v0.8:dispatch_parallel 并行派发、review_output 跨模型交叉评审、read_session、AnthropicProvider、更多 Agent 工具(OpenCode / Aider…)、局域网远程访问
 
 ## License

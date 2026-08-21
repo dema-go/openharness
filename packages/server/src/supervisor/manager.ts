@@ -61,7 +61,12 @@ export interface SupervisorStore {
 
 /** manager 依赖的 TaskManager 子集 */
 export interface SupervisorTasks {
-  start(adapter: AgentAdapter, opts: { cwd: string; prompt: string; displayPrompt?: string }): Promise<TaskInfo>;
+  start(adapter: AgentAdapter, opts: {
+    cwd: string;
+    prompt: string;
+    displayPrompt?: string;
+    bypassPermissions?: boolean;
+  }): Promise<TaskInfo>;
   stop(id: string): Promise<TaskInfo | null>;
 }
 
@@ -112,7 +117,12 @@ export class SupervisorManager {
   // ---- 对外 API ----
 
   /** 发起一次编排:创建记录并异步驱动循环(立即返回 run) */
-  async start(opts: { goal: string; cwd: string; mode: 'hitl' | 'auto' }): Promise<SupervisorRunRecord> {
+  async start(opts: {
+    goal: string;
+    cwd: string;
+    mode: 'hitl' | 'auto';
+    bypassPermissions?: boolean;
+  }): Promise<SupervisorRunRecord> {
     const goal = opts.goal.trim();
     if (!goal) throw new Error('编排目标不能为空');
     if (!opts.cwd.trim()) throw new Error('工作目录为必填');
@@ -125,6 +135,7 @@ export class SupervisorManager {
       goal,
       cwd: opts.cwd,
       mode: opts.mode,
+      bypassPermissions: opts.bypassPermissions === true,
       state: 'planning',
       plan: null,
       report: null,
@@ -172,8 +183,14 @@ export class SupervisorManager {
 
     let merged: SupervisorPlan | undefined;
     if (plan?.steps?.length) {
-      merged = this.normalizePlan(plan, act.record.goal) ?? undefined;
+      const revisedGoal = String(plan.goal ?? '').trim() || act.record.goal;
+      merged = this.normalizePlan(plan, revisedGoal) ?? undefined;
       if (!merged) throw new Error('修订计划不合法:steps 为空或字段缺失');
+      // 修订被采纳:goal 与 plan 同步落账,报告/后续阶段以修订后口径为准
+      act.record.goal = revisedGoal;
+      act.record.plan = merged;
+      this.deps.store.upsertSupervisorRun(act.record);
+      this.broadcastRun(id);
     }
 
     if (act.gate) {
@@ -610,6 +627,7 @@ export class SupervisorManager {
       cwd: act.record.cwd,
       prompt: this.deps.roles.inject(agent, prompt),
       displayPrompt: prompt,
+      bypassPermissions: act.record.bypassPermissions === true,
     });
     act.currentTaskId = info.id;
 

@@ -28,6 +28,11 @@ export function ConfigPanel(): React.JSX.Element {
   const [busyAgent, setBusyAgent] = useState<string | null>(null);
   const [roles, setRoles] = useState<Record<string, string>>({});
   const [roleDrafts, setRoleDrafts] = useState<Record<string, string>>({});
+  // 编排大脑( Supervisor LLM)
+  const [sup, setSup] = useState<{ baseUrl: string; model: string; hasApiKey: boolean; configured: boolean } | null>(null);
+  const [supDraft, setSupDraft] = useState({ baseUrl: '', model: '', apiKey: '' });
+  const [supFb, setSupFb] = useState<Feedback | null>(null);
+  const [supBusy, setSupBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     const [cfg, pre, rl] = await Promise.all([api.config(), api.presets(), api.roles()]);
@@ -45,6 +50,13 @@ export function ConfigPanel(): React.JSX.Element {
       }),
     );
     setSchemas(schemaMap);
+    try {
+      const sc = await api.supervisorConfig();
+      setSup(sc);
+      setSupDraft((d) => ({ ...d, baseUrl: d.baseUrl || sc.baseUrl, model: d.model || sc.model }));
+    } catch {
+      /* 编排配置不可用 */
+    }
   }, []);
 
   useEffect(() => {
@@ -135,12 +147,97 @@ export function ConfigPanel(): React.JSX.Element {
     }
   };
 
+  const saveSupervisor = async () => {
+    setSupBusy(true);
+    setSupFb(null);
+    try {
+      const body: { baseUrl?: string; model?: string; apiKey?: string } = {};
+      if (supDraft.baseUrl.trim() && supDraft.baseUrl.trim() !== sup?.baseUrl) body.baseUrl = supDraft.baseUrl.trim();
+      if (supDraft.model.trim() && supDraft.model.trim() !== sup?.model) body.model = supDraft.model.trim();
+      if (supDraft.apiKey.trim()) body.apiKey = supDraft.apiKey.trim();
+      const applied = await api.updateSupervisorConfig(body);
+      setSupDraft((d) => ({ ...d, apiKey: '' }));
+      setSupFb({
+        ok: true,
+        text: `已保存(${applied.applied.length > 0 ? applied.applied.join('/') : '无变更'})`,
+      });
+      const sc = await api.supervisorConfig();
+      setSup(sc);
+    } catch (err) {
+      setSupFb({ ok: false, text: err instanceof Error ? err.message : '保存失败' });
+    } finally {
+      setSupBusy(false);
+    }
+  };
+
   return (
     <div className="min-h-0 flex-1 overflow-y-auto p-4">
       <div className="bubble mb-5 max-w-2xl font-display text-[12.5px] text-ink">
         可直接修改各工具的配置(api key / baseUrl / 模型等),写回原配置文件;还可把整套配置存为预设,
         一键切换(参考 cc switch)。密钥明文只存本机,页面不回显任何片段;密钥字段留空即保持不变。
       </div>
+
+      {/* 编排大脑:Supervisor LLM(OpenAI 兼容) */}
+      <section className="comic-card mb-4 p-4">
+        <div className="flex items-center gap-2.5">
+          <AgentAvatar agent="supervisor" size={38} />
+          <h3 className="font-display text-[15px] text-ink">
+            编排大脑
+            <span className="ml-2 text-[11px] text-faint">指挥官的 LLM(OpenAI 兼容:DeepSeek/Qwen/GLM/Kimi/Ollama)</span>
+          </h3>
+          <span className={`sticker ml-auto ${sup?.configured ? 'bg-green text-white' : 'bg-red text-white'}`}>
+            {sup?.configured ? '已配置' : '未配置'}
+          </span>
+        </div>
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <label className="block">
+            <span className="mb-1 block font-mono text-[10.5px] text-dim">baseUrl</span>
+            <input
+              value={supDraft.baseUrl}
+              onChange={(e) => setSupDraft((d) => ({ ...d, baseUrl: e.target.value }))}
+              placeholder="https://api.deepseek.com/v1"
+              className="comic-input w-full font-mono text-[11.5px]"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block font-mono text-[10.5px] text-dim">model</span>
+            <input
+              value={supDraft.model}
+              onChange={(e) => setSupDraft((d) => ({ ...d, model: e.target.value }))}
+              placeholder="deepseek-chat"
+              className="comic-input w-full font-mono text-[11.5px]"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block font-mono text-[10.5px] text-dim">
+              API Key{sup?.hasApiKey ? '(已设置,留空不改)' : ''}
+            </span>
+            <input
+              type="password"
+              value={supDraft.apiKey}
+              onChange={(e) => setSupDraft((d) => ({ ...d, apiKey: e.target.value }))}
+              placeholder={sup?.hasApiKey ? '••••••••' : 'sk-…'}
+              className="comic-input w-full font-mono text-[11.5px]"
+            />
+          </label>
+        </div>
+        <div className="mt-3 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => void saveSupervisor()}
+            disabled={supBusy}
+            className="comic-btn bg-red px-4 py-1.5 font-display text-[12.5px] text-white disabled:opacity-40"
+          >
+            {supBusy ? '保存中…' : '保存'}
+          </button>
+          {supFb && (
+            <span className={`text-[12px] ${supFb.ok ? 'text-green' : 'text-red'}`}>
+              {supFb.ok ? '✓' : '✗'} {supFb.text}
+            </span>
+          )}
+        </div>
+      </section>
+
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {configs.map((cfg, i) => {
           const agent = cfg.agent as AgentId;

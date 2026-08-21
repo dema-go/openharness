@@ -7,6 +7,9 @@ import type {
   EventKind,
   HarnessEvent,
   SessionSummary,
+  SupervisorPlan,
+  SupervisorRunRecord,
+  SupervisorStepRecord,
   TaskInfo,
 } from '@openharness/core';
 
@@ -34,6 +37,14 @@ export interface AgentConfigInfo {
   agent: string;
   sections: Array<{ title: string; items: Array<{ key: string; value: string; masked?: boolean }> }>;
   notes?: string[];
+}
+
+export interface SupervisorConfigPublic {
+  provider: string;
+  baseUrl: string;
+  model: string;
+  hasApiKey: boolean;
+  configured: boolean;
 }
 
 export const api = {
@@ -176,4 +187,30 @@ export const api = {
     j<{ ok: boolean }>(`/conversations/${id}/stop`, { method: 'POST' }),
   deleteConversation: (id: string) =>
     j<{ ok: boolean }>(`/conversations/${id}`, { method: 'DELETE' }),
+  // ---- Supervisor 编排 ----
+  supervisorConfig: () => j<SupervisorConfigPublic>('/supervisor/config'),
+  updateSupervisorConfig: (body: { baseUrl?: string; model?: string; apiKey?: string }) =>
+    j<{ applied: string[] }>('/supervisor/config', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  supervisorRuns: (limit = 30) => j<SupervisorRunRecord[]>(`/supervisor/runs?limit=${limit}`),
+  supervisorRun: (id: string) => j<{ run: SupervisorRunRecord; steps: SupervisorStepRecord[] }>(`/supervisor/runs/${id}`),
+  startSupervisorRun: (body: { goal: string; cwd: string; mode: 'hitl' | 'auto'; bypassPermissions?: boolean }) =>
+    j<SupervisorRunRecord>('/supervisor/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  approveSupervisorRun: (
+    id: string,
+    body: { action: 'approve' | 'reject'; plan?: SupervisorPlan },
+  ) =>
+    j<SupervisorRunRecord>(`/supervisor/runs/${id}/approve`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  stopSupervisorRun: (id: string) => j<SupervisorRunRecord>(`/supervisor/runs/${id}/stop`, { method: 'POST' }),
 };

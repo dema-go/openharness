@@ -3,6 +3,26 @@
 > 版本规则与提交规范见 [docs/harness/git.md](docs/harness/git.md)。新版本在上。
 > 早期版本(v0.1 / v0.2)在引入 CHANGELOG 前,按 git log 与 README 简录补记。
 
+## [v0.7.1] - 2026-08-21
+
+M2:编排 Tab UI + 人在环门禁可视化 + 真机发现的修复。
+
+### 新增
+- **编排 Tab(指挥官驾驶舱)**:发起表单(目标/工作目录/模式开关/完全自主开关)+ run 列表(9 态贴纸)+ 详情视图(状态条含 tokens/中止按钮、作战计划卡、步骤看板、最终报告 MdBody 渲染)
+- **人在环门禁可视化**:awaiting_approval 时详情区出现计划卡与三键审批(批准执行/修订计划/否决);修订计划用行格式编辑(`title | agent | prompt | 验收标准 | autoCheck`),按修订批准后 goal 与 steps 同步替换
+- **配置页「编排大脑」卡**:Supervisor LLM(OpenAI 兼容)baseUrl/model/API Key 编辑,密钥留空不改、零回显;配置状态贴纸;未配置时编排表单区引导提示
+- **run 实时推送**:WS supervisor 消息合并进列表(新 run 插头),终态且非当前查看时发桌面通知
+- **bypassPermissions run 级透传**:auto 模式可选完全自主(Worker 跳过权限确认);hitl 审批通过视同已确认;持久化(DB 迁移补列)
+
+### 修复
+- **approve 带修订计划时 goal 未同步**(真机冒烟发现):run 的 goal 停留旧值,最终报告口径与实际执行错位 → 修订被采纳时 goal 与 plan 一并落账
+
+### 测试
+- 新增:修订批准(goal/plan 同步 + 按修订派发 + 持久化)、bypassPermissions 透传(开/关)——总计 69 项断言
+
+### 验证
+- 浏览器端到端(agent-browser):UI 发起 hitl run → 「等待审批」贴纸 + 作战计划卡 → 点击「批准执行!」→ 执行中/验收中实时流转 → 完成;步骤看板验收✓(含 LLM 验收理由原文)、最终报告 MdBody 完整渲染(12 个版本/推荐 v0.7.0 与 v0.3.0)
+
 ## [v0.7.0] - 2026-08-21
 
 定位升级轮:引入 **Supervisor 编排层**——平台自身实现 Agent 循环(设计见 `docs/supervisor-design.md`,对标 clowder-ai 的 CatAgent 原生 Agent 模式)。本版交付后端完整闭环(M1);编排 UI(M2)与并行派发/交叉评审(M3)见 Roadmap。

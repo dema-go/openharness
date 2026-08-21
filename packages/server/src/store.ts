@@ -40,6 +40,7 @@ function supervisorRunFromRow(r: Record<string, unknown>): SupervisorRunRecord {
     goal: r.goal as string,
     cwd: r.cwd as string,
     mode: r.mode as SupervisorRunRecord['mode'],
+    bypassPermissions: r.bypass_permissions === 1,
     state: r.state as SupervisorRunRecord['state'],
     plan,
     report: (r.report as string | null) ?? null,
@@ -173,6 +174,11 @@ export class Store implements CursorStore {
     const convCols = this.db.prepare('PRAGMA table_info(conversations)').all() as Array<{ name: string }>;
     if (!convCols.some((c) => c.name === 'stage')) {
       this.db.exec("ALTER TABLE conversations ADD COLUMN stage TEXT NOT NULL DEFAULT 'idea'");
+    }
+    // 迁移:supervisor_runs 补 bypass_permissions 列(编排派发跳过 Worker 权限确认)
+    const supCols = this.db.prepare('PRAGMA table_info(supervisor_runs)').all() as Array<{ name: string }>;
+    if (!supCols.some((c) => c.name === 'bypass_permissions')) {
+      this.db.exec('ALTER TABLE supervisor_runs ADD COLUMN bypass_permissions INTEGER NOT NULL DEFAULT 0');
     }
   }
 
@@ -524,10 +530,11 @@ export class Store implements CursorStore {
   upsertSupervisorRun(r: SupervisorRunRecord): void {
     this.db
       .prepare(
-        `INSERT INTO supervisor_runs (id, goal, cwd, mode, state, plan_json, report, error, usage_json, created_at, ended_at)
-         VALUES (@id, @goal, @cwd, @mode, @state, @planJson, @report, @error, @usageJson, @createdAt, @endedAt)
+        `INSERT INTO supervisor_runs (id, goal, cwd, mode, bypass_permissions, state, plan_json, report, error, usage_json, created_at, ended_at)
+         VALUES (@id, @goal, @cwd, @mode, @bypassPermissions, @state, @planJson, @report, @error, @usageJson, @createdAt, @endedAt)
          ON CONFLICT(id) DO UPDATE SET
-           goal = excluded.goal, cwd = excluded.cwd, mode = excluded.mode, state = excluded.state,
+           goal = excluded.goal, cwd = excluded.cwd, mode = excluded.mode, bypass_permissions = excluded.bypass_permissions,
+           state = excluded.state,
            plan_json = excluded.plan_json, report = excluded.report, error = excluded.error,
            usage_json = excluded.usage_json, created_at = excluded.created_at, ended_at = excluded.ended_at`,
       )
@@ -536,6 +543,7 @@ export class Store implements CursorStore {
         goal: r.goal,
         cwd: r.cwd,
         mode: r.mode,
+        bypassPermissions: r.bypassPermissions === true ? 1 : 0,
         state: r.state,
         planJson: r.plan ? JSON.stringify(r.plan) : null,
         report: r.report,
