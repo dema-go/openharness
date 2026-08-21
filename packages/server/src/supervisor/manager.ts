@@ -229,6 +229,10 @@ export class SupervisorManager {
     this.setState(id, 'planning');
     const plan = await this.planPhase(id, provider, '');
     if (!plan) return; // 失败已在 planPhase 内落账
+    if (this.isStopped(id)) {
+      this.settleRun(id, 'stopped', this.active.get(id)?.stopRequested ?? '用户中止');
+      return;
+    }
 
     if (this.active.get(id)?.record.mode === 'hitl') {
       this.setState(id, 'awaiting_approval');
@@ -276,6 +280,10 @@ export class SupervisorManager {
       this.setState(id, 'planning');
       const plan = await this.planPhase(id, provider, extraContext);
       if (!plan) return;
+      if (this.isStopped(id)) {
+        this.settleRun(id, 'stopped', this.active.get(id)?.stopRequested ?? '用户中止');
+        return;
+      }
 
       if (this.active.get(id)?.record.mode === 'hitl') {
         this.setState(id, 'awaiting_approval');

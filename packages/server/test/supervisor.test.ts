@@ -282,6 +282,18 @@ describe('SupervisorManager 全链路', () => {
     expect(tasks.stopped).toHaveLength(1); // Worker 任务被 stop
   });
 
+  it('stop():规划阶段中止 → stopped(不进入门禁挂起)', async () => {
+    const { mgr, store } = makeManager([toolCallResponse('submit_plan', { steps: [planStep] })]);
+    const run = await mgr.start({ goal: '完成 K', cwd: '/tmp', mode: 'hitl' });
+    // 立刻中止:planPhase 尚未完成,无 gate、非 executing
+    const final = await mgr.stop(run.id);
+    expect(final?.state).toBe('stopped');
+    // 回归断言:run 不得停留在 awaiting_approval 挂起等审批
+    const settled = store.getSupervisorRun(run.id)!;
+    expect(['stopped', 'failed', 'done']).toContain(settled.state);
+    expect(settled.state).not.toBe('awaiting_approval');
+  });
+
   it('规划前可调用 context 工具(query_events/memory_read)', async () => {
     const { mgr, provider } = makeManager([
       toolCallResponse('memory_read', {}),
