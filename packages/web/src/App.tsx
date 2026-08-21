@@ -258,7 +258,7 @@ export function App(): React.JSX.Element {
             ) : tab === 'usage' ? (
               <UsagePanel />
             ) : (
-              <ConfigPanel />
+              <ConfigPanel onGoOrchestrate={() => setTab('orchestrate')} />
             )}
           </div>
         </main>

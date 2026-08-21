@@ -18,7 +18,7 @@ function fmtDate(ts: number): string {
   }).format(ts);
 }
 
-export function ConfigPanel(): React.JSX.Element {
+export function ConfigPanel(props: { onGoOrchestrate?: () => void }): React.JSX.Element {
   const [configs, setConfigs] = useState<AgentConfigInfo[] | null>(null);
   const [schemas, setSchemas] = useState<Record<string, ConfigFieldDef[]>>({});
   const [presets, setPresets] = useState<AgentPresetPublic[]>([]);
@@ -177,66 +177,6 @@ export function ConfigPanel(): React.JSX.Element {
         一键切换(参考 cc switch)。密钥明文只存本机,页面不回显任何片段;密钥字段留空即保持不变。
       </div>
 
-      {/* 编排大脑:Supervisor LLM(OpenAI 兼容) */}
-      <section className="comic-card mb-4 p-4">
-        <div className="flex items-center gap-2.5">
-          <AgentAvatar agent="supervisor" size={38} />
-          <h3 className="font-display text-[15px] text-ink">
-            编排大脑
-            <span className="ml-2 text-[11px] text-faint">指挥官的 LLM(OpenAI 兼容:DeepSeek/Qwen/GLM/Kimi/Ollama)</span>
-          </h3>
-          <span className={`sticker ml-auto ${sup?.configured ? 'bg-green text-white' : 'bg-red text-white'}`}>
-            {sup?.configured ? '已配置' : '未配置'}
-          </span>
-        </div>
-        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <label className="block">
-            <span className="mb-1 block font-mono text-[10.5px] text-dim">baseUrl</span>
-            <input
-              value={supDraft.baseUrl}
-              onChange={(e) => setSupDraft((d) => ({ ...d, baseUrl: e.target.value }))}
-              placeholder="https://api.deepseek.com/v1"
-              className="comic-input w-full font-mono text-[11.5px]"
-            />
-          </label>
-          <label className="block">
-            <span className="mb-1 block font-mono text-[10.5px] text-dim">model</span>
-            <input
-              value={supDraft.model}
-              onChange={(e) => setSupDraft((d) => ({ ...d, model: e.target.value }))}
-              placeholder="deepseek-chat"
-              className="comic-input w-full font-mono text-[11.5px]"
-            />
-          </label>
-          <label className="block">
-            <span className="mb-1 block font-mono text-[10.5px] text-dim">
-              API Key{sup?.hasApiKey ? '(已设置,留空不改)' : ''}
-            </span>
-            <input
-              type="password"
-              value={supDraft.apiKey}
-              onChange={(e) => setSupDraft((d) => ({ ...d, apiKey: e.target.value }))}
-              placeholder={sup?.hasApiKey ? '••••••••' : 'sk-…'}
-              className="comic-input w-full font-mono text-[11.5px]"
-            />
-          </label>
-        </div>
-        <div className="mt-3 flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => void saveSupervisor()}
-            disabled={supBusy}
-            className="comic-btn bg-red px-4 py-1.5 font-display text-[12.5px] text-white disabled:opacity-40"
-          >
-            {supBusy ? '保存中…' : '保存'}
-          </button>
-          {supFb && (
-            <span className={`text-[12px] ${supFb.ok ? 'text-green' : 'text-red'}`}>
-              {supFb.ok ? '✓' : '✗'} {supFb.text}
-            </span>
-          )}
-        </div>
-      </section>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {configs.map((cfg, i) => {
@@ -461,6 +401,77 @@ export function ConfigPanel(): React.JSX.Element {
           );
         })}
       </div>
+
+      {/* 编排大脑:Supervisor LLM(OpenAI 兼容)——放在特工配置之后,避免与编排 Tab 混淆 */}
+      <section className="comic-card mt-4 p-4">
+        <div className="flex items-center gap-2.5">
+          <AgentAvatar agent="supervisor" size={38} />
+          <h3 className="font-display text-[15px] text-ink">
+            编排大脑
+            <span className="ml-2 text-[11px] text-faint">指挥官的 LLM(OpenAI 兼容:DeepSeek/Qwen/GLM/Kimi/Ollama)——编排 Tab 里用的就是它</span>
+          </h3>
+          <span className={`sticker ml-auto ${sup?.configured ? 'bg-green text-white' : 'bg-red text-white'}`}>
+            {sup?.configured ? '已配置' : '未配置'}
+          </span>
+        </div>
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <label className="block">
+            <span className="mb-1 block font-mono text-[10.5px] text-dim">baseUrl</span>
+            <input
+              value={supDraft.baseUrl}
+              onChange={(e) => setSupDraft((d) => ({ ...d, baseUrl: e.target.value }))}
+              placeholder="https://api.deepseek.com/v1"
+              className="comic-input w-full font-mono text-[11.5px]"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block font-mono text-[10.5px] text-dim">model</span>
+            <input
+              value={supDraft.model}
+              onChange={(e) => setSupDraft((d) => ({ ...d, model: e.target.value }))}
+              placeholder="deepseek-chat"
+              className="comic-input w-full font-mono text-[11.5px]"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block font-mono text-[10.5px] text-dim">
+              API Key{sup?.hasApiKey ? '(已设置,留空不改)' : ''}
+            </span>
+            <input
+              type="password"
+              value={supDraft.apiKey}
+              onChange={(e) => setSupDraft((d) => ({ ...d, apiKey: e.target.value }))}
+              placeholder={sup?.hasApiKey ? '••••••••' : 'sk-…'}
+              className="comic-input w-full font-mono text-[11.5px]"
+            />
+          </label>
+        </div>
+        <div className="mt-3 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => void saveSupervisor()}
+            disabled={supBusy}
+            className="comic-btn bg-red px-4 py-1.5 font-display text-[12.5px] text-white disabled:opacity-40"
+          >
+            {supBusy ? '保存中…' : '保存'}
+          </button>
+          {props.onGoOrchestrate && (
+            <button
+              type="button"
+              onClick={props.onGoOrchestrate}
+              className="comic-btn bg-white px-3 py-1.5 font-display text-[12.5px] text-ink"
+              title="跳到编排 Tab 发起一次编排"
+            >
+              去发起编排 →
+            </button>
+          )}
+          {supFb && (
+            <span className={`text-[12px] ${supFb.ok ? 'text-green' : 'text-red'}`}>
+              {supFb.ok ? '✓' : '✗'} {supFb.text}
+            </span>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
