@@ -15,6 +15,7 @@ const CAPABILITY: Record<AgentId, string> = {
   claude: 'hooks、plan 模式、subagents、terminal 直控,适合多步编排',
   codex: 'sandbox 沙箱隔离执行、computer use、rollout,适合实验性代码',
   dsh: 'profile/plugin 可组合体系、多 provider、MCP 生态',
+  supervisor: '多步目标拆解、Worker 派发与验收(经编排页使用,不参加单任务推荐)',
 };
 
 const RULES: Record<AgentId, Rule[]> = {
@@ -34,6 +35,8 @@ const RULES: Record<AgentId, Rule[]> = {
     { re: /插件|plugin|profile|mcp|多模型|多provider|对比.*模型|评测/, weight: 3, reason: 'profile/plugin/MCP 体系是 DSH 的特色' },
     { re: /harness|自建|工具链|补丁|patch/, weight: 2, reason: 'harness 层组合能力匹配' },
   ],
+  // supervisor 不参加发射台单任务推荐(编排经独立入口),无规则
+  supervisor: [],
 };
 
 export interface Suggestion {

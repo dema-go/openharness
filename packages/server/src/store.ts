@@ -17,8 +17,38 @@ import type {
   EventKind,
   HarnessEvent,
   SessionSummary,
+  SupervisorRunRecord,
+  SupervisorStepRecord,
   TaskInfo,
 } from '@openharness/core';
+
+function supervisorRunFromRow(r: Record<string, unknown>): SupervisorRunRecord {
+  let usage = { input: 0, output: 0 };
+  try {
+    if (r.usage_json) usage = JSON.parse(r.usage_json as string) as typeof usage;
+  } catch {
+    /* 损坏按零处理 */
+  }
+  let plan: SupervisorRunRecord['plan'] = null;
+  try {
+    if (r.plan_json) plan = JSON.parse(r.plan_json as string) as SupervisorRunRecord['plan'];
+  } catch {
+    /* 损坏按无计划处理 */
+  }
+  return {
+    id: r.id as string,
+    goal: r.goal as string,
+    cwd: r.cwd as string,
+    mode: r.mode as SupervisorRunRecord['mode'],
+    state: r.state as SupervisorRunRecord['state'],
+    plan,
+    report: (r.report as string | null) ?? null,
+    error: (r.error as string | null) ?? null,
+    usage,
+    createdAt: r.created_at as number,
+    endedAt: r.ended_at != null ? (r.ended_at as number) : null,
+  };
+}
 
 export class Store implements CursorStore {
   private readonly db: Database.Database;
@@ -98,6 +128,35 @@ export class Store implements CursorStore {
       CREATE TABLE IF NOT EXISTS meta (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS supervisor_runs (
+        id TEXT PRIMARY KEY,
+        goal TEXT NOT NULL,
+        cwd TEXT NOT NULL,
+        mode TEXT NOT NULL,
+        state TEXT NOT NULL,
+        plan_json TEXT,
+        report TEXT,
+        error TEXT,
+        usage_json TEXT,
+        created_at INTEGER NOT NULL,
+        ended_at INTEGER
+      );
+      CREATE TABLE IF NOT EXISTS supervisor_steps (
+        run_id TEXT NOT NULL,
+        step_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        agent TEXT NOT NULL,
+        prompt TEXT NOT NULL,
+        acceptance_check TEXT NOT NULL,
+        auto_check INTEGER NOT NULL DEFAULT 0,
+        state TEXT NOT NULL,
+        task_id TEXT,
+        attempt INTEGER NOT NULL DEFAULT 0,
+        output TEXT,
+        verify_result TEXT,
+        verify_reason TEXT,
+        PRIMARY KEY (run_id, step_id)
       );
     `);
     // 迁移:旧库 events 表补 model 列(按模型用量聚合)
@@ -458,6 +517,97 @@ export class Store implements CursorStore {
          WHERE state IN ('running', 'queued')`,
       )
       .run(now);
+  }
+
+  // ---- Supervisor 编排层 ----
+
+  upsertSupervisorRun(r: SupervisorRunRecord): void {
+    this.db
+      .prepare(
+        `INSERT INTO supervisor_runs (id, goal, cwd, mode, state, plan_json, report, error, usage_json, created_at, ended_at)
+         VALUES (@id, @goal, @cwd, @mode, @state, @planJson, @report, @error, @usageJson, @createdAt, @endedAt)
+         ON CONFLICT(id) DO UPDATE SET
+           goal = excluded.goal, cwd = excluded.cwd, mode = excluded.mode, state = excluded.state,
+           plan_json = excluded.plan_json, report = excluded.report, error = excluded.error,
+           usage_json = excluded.usage_json, created_at = excluded.created_at, ended_at = excluded.ended_at`,
+      )
+      .run({
+        id: r.id,
+        goal: r.goal,
+        cwd: r.cwd,
+        mode: r.mode,
+        state: r.state,
+        planJson: r.plan ? JSON.stringify(r.plan) : null,
+        report: r.report,
+        error: r.error,
+        usageJson: JSON.stringify(r.usage),
+        createdAt: r.createdAt,
+        endedAt: r.endedAt ?? null,
+      });
+    // 保留最近 100 条 run,防无限膨胀
+    this.db
+      .prepare(
+        `DELETE FROM supervisor_runs WHERE id NOT IN (
+           SELECT id FROM supervisor_runs ORDER BY created_at DESC LIMIT 100
+         )`,
+      )
+      .run();
+  }
+
+  getSupervisorRun(id: string): SupervisorRunRecord | undefined {
+    const row = this.db.prepare('SELECT * FROM supervisor_runs WHERE id = ?').get(id) as
+      | Record<string, unknown>
+      | undefined;
+    return row ? supervisorRunFromRow(row) : undefined;
+  }
+
+  listSupervisorRuns(limit = 50): SupervisorRunRecord[] {
+    const rows = this.db
+      .prepare('SELECT * FROM supervisor_runs ORDER BY created_at DESC LIMIT ?')
+      .all(limit) as unknown as Array<Record<string, unknown>>;
+    return rows.map(supervisorRunFromRow);
+  }
+
+  upsertSupervisorStep(s: SupervisorStepRecord): void {
+    this.db
+      .prepare(
+        `INSERT INTO supervisor_steps (run_id, step_id, title, agent, prompt, acceptance_check, auto_check, state, task_id, attempt, output, verify_result, verify_reason)
+         VALUES (@runId, @stepId, @title, @agent, @prompt, @acceptanceCheck, @autoCheck, @state, @taskId, @attempt, @output, @verifyResult, @verifyReason)
+         ON CONFLICT(run_id, step_id) DO UPDATE SET
+           title = excluded.title, agent = excluded.agent, prompt = excluded.prompt,
+           acceptance_check = excluded.acceptance_check, auto_check = excluded.auto_check,
+           state = excluded.state, task_id = excluded.task_id, attempt = excluded.attempt,
+           output = excluded.output, verify_result = excluded.verify_result, verify_reason = excluded.verify_reason`,
+      )
+      .run({
+        ...s,
+        autoCheck: s.autoCheck ? 1 : 0,
+        taskId: s.taskId ?? null,
+        output: s.output ?? null,
+        verifyResult: s.verifyResult ?? null,
+        verifyReason: s.verifyReason ?? null,
+      });
+  }
+
+  listSupervisorSteps(runId: string): SupervisorStepRecord[] {
+    const rows = this.db
+      .prepare('SELECT * FROM supervisor_steps WHERE run_id = ? ORDER BY rowid')
+      .all(runId) as unknown as Array<Record<string, unknown>>;
+    return rows.map((r) => ({
+      runId: r.run_id as string,
+      stepId: r.step_id as string,
+      title: r.title as string,
+      agent: r.agent as SupervisorStepRecord['agent'],
+      prompt: r.prompt as string,
+      acceptanceCheck: r.acceptance_check as string,
+      autoCheck: Boolean(r.auto_check),
+      state: r.state as SupervisorStepRecord['state'],
+      taskId: (r.task_id as string | null) ?? null,
+      attempt: r.attempt as number,
+      output: (r.output as string | null) ?? null,
+      verifyResult: (r.verify_result as 'pass' | 'fail' | null) ?? null,
+      verifyReason: (r.verify_reason as string | null) ?? null,
+    }));
   }
 
   close(): void {

@@ -4,12 +4,13 @@
  */
 import type { AgentId } from '@openharness/core';
 
-/** 特工档案 */
+/** 特工档案(supervisor=指挥官:编排层 Agent,无 CLI 运行时) */
 export const AGENT_CHARACTER: Record<AgentId, { name: string; title: string; color: string }> = {
   cursor: { name: '光标侠', title: '编辑器内改文件', color: '#FF4433' },
   claude: { name: '小克', title: '工程编排担当', color: '#FF9F1C' },
   codex: { name: '码星人', title: '沙箱实验员', color: '#00C2DC' },
   dsh: { name: '鲸酱', title: '深度复盘担当', color: '#8B4DFF' },
+  supervisor: { name: '指挥官', title: '编排与验收', color: '#1F7A4D' },
 };
 
 function Defs(): React.JSX.Element {

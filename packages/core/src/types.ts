@@ -3,15 +3,23 @@
  * 所有适配器把工具原生记录归一化为 HarnessEvent,前端只消费统一模型。
  */
 
-export type AgentId = 'cursor' | 'claude' | 'codex' | 'dsh';
+/**
+ * AgentId 包含四个 Worker(CLI 工具)与 Supervisor(编排层,平台自身实现的
+ * Agent 循环)。AGENT_IDS 只列 Worker:状态卡/发射台面向被编排的工具;
+ * Supervisor 经编排接口驱动,不经 /api/tasks 直接发射。
+ */
+export type AgentId = 'cursor' | 'claude' | 'codex' | 'dsh' | 'supervisor';
 
 export const AGENT_IDS: AgentId[] = ['cursor', 'claude', 'codex', 'dsh'];
+
+export const WORKER_AGENT_IDS: readonly AgentId[] = ['cursor', 'claude', 'codex', 'dsh'];
 
 export const AGENT_DISPLAY: Record<AgentId, string> = {
   cursor: 'Cursor',
   claude: 'Claude Code',
   codex: 'Codex',
   dsh: 'DeepSeek Harness',
+  supervisor: 'Supervisor',
 };
 
 export type EventKind =
@@ -24,7 +32,14 @@ export type EventKind =
   | 'error'
   | 'mode-change'
   | 'task-start'
-  | 'task-end';
+  | 'task-end'
+  // ---- Supervisor 编排层(平台自身 Agent 循环的活动,meta.supervisorRunId 归因) ----
+  | 'plan-created'
+  | 'gate-waiting'
+  | 'verify-passed'
+  | 'verify-failed'
+  | 'replan'
+  | 'run-finalized';
 
 export const EVENT_KIND_LABEL: Record<EventKind, string> = {
   'session-start': '会话开始',
@@ -37,6 +52,12 @@ export const EVENT_KIND_LABEL: Record<EventKind, string> = {
   'mode-change': '模式切换',
   'task-start': '任务启动',
   'task-end': '任务结束',
+  'plan-created': '计划生成',
+  'gate-waiting': '等待审批',
+  'verify-passed': '验收通过',
+  'verify-failed': '验收失败',
+  'replan': '重新规划',
+  'run-finalized': '编排完成',
 };
 
 /** 归一化事件:所有 Agent 的实时活动都表达为这个结构。 */
@@ -231,4 +252,73 @@ export interface ConversationAgentState {
   /** 该 Agent 当前可续接的原生会话 ID(为空 = 尚未在本对话中回答过) */
   sessionId: string | null;
   cwd: string | null;
+}
+
+// ---- Supervisor 编排层(平台自身的 Agent 循环) ----
+
+export type SupervisorMode = 'hitl' | 'auto';
+
+/** run 状态机:planning → (hitl: awaiting_approval) → executing → verifying → reflecting → finalizing → done/failed/stopped */
+export type SupervisorRunState =
+  | 'planning'
+  | 'awaiting_approval'
+  | 'executing'
+  | 'verifying'
+  | 'reflecting'
+  | 'finalizing'
+  | 'done'
+  | 'failed'
+  | 'stopped';
+
+/** 计划步骤:由哪位 Worker 执行什么、怎么算完成。 */
+export interface PlanStep {
+  id: string;
+  title: string;
+  /** 执行者:四个 Worker 之一(supervisor 不允许) */
+  agent: AgentId;
+  prompt: string;
+  /** 验收标准:交给验收 LLM 判定,或 autoCheck 时只看任务状态 */
+  acceptanceCheck: string;
+  /** 跳过 LLM 验收,仅以任务 done 状态为准(省 token) */
+  autoCheck?: boolean;
+}
+
+export interface SupervisorPlan {
+  goal: string;
+  steps: PlanStep[];
+}
+
+export type SupervisorStepState = 'pending' | 'running' | 'done' | 'failed' | 'skipped';
+
+export interface SupervisorStepRecord {
+  runId: string;
+  stepId: string;
+  title: string;
+  agent: AgentId;
+  prompt: string;
+  acceptanceCheck: string;
+  autoCheck: boolean;
+  state: SupervisorStepState;
+  taskId: string | null;
+  /** 第几次尝试(从 1 起,含自动重试) */
+  attempt: number;
+  /** 最后一次 Worker 产出摘要(截断入库) */
+  output: string | null;
+  verifyResult: 'pass' | 'fail' | null;
+  verifyReason: string | null;
+}
+
+export interface SupervisorRunRecord {
+  id: string;
+  goal: string;
+  cwd: string;
+  mode: SupervisorMode;
+  state: SupervisorRunState;
+  plan: SupervisorPlan | null;
+  report: string | null;
+  error: string | null;
+  /** Supervisor 自身 LLM 消耗(Worker 消耗归各 Agent 事件) */
+  usage: { input: number; output: number };
+  createdAt: number;
+  endedAt: number | null;
 }

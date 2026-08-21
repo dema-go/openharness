@@ -15,6 +15,12 @@ const KIND_STICKER: Record<HarnessEvent['kind'], string> = {
   'mode-change': 'bg-purple text-white',
   'task-start': 'bg-red text-white',
   'task-end': 'bg-green text-white',
+  'plan-created': 'bg-purple text-white',
+  'gate-waiting': 'bg-orange',
+  'verify-passed': 'bg-green text-white',
+  'verify-failed': 'bg-red text-white',
+  'replan': 'bg-yellow',
+  'run-finalized': 'bg-green text-white',
 };
 
 function fmtTime(ts: number): string {

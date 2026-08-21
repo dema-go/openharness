@@ -11,6 +11,38 @@
 >
 > 实施顺序:3 活动流 → 4 用量 → 2 配置 → 1 对话
 
+## 第 8 轮:v0.7 Supervisor 编排层(定位升级:真正的 Agent 项目)
+
+> 来源:2026-08-19 用户决策——项目从「可观测控制面」升级为「带自研 Agent 循环的编排平台」;
+> 设计方案 `docs/supervisor-design.md`(对标 clowder-ai CatAgent 模式,用户已确认)。
+> 已确认决策:LLM 大脑=OpenAI 兼容直连(冒烟用 DeepSeek);执行模式=人在环/全自动可切换;简历等实现验证后再改。
+
+### M1:后端编排闭环(v0.7.0 已交付)
+
+- [x] M1.1 core:AgentId 增加 supervisor(第五位成员,不占状态卡);EventKind +6(plan-created/gate-waiting/verify-passed/verify-failed/replan/run-finalized);Supervisor 类型契约
+- [x] M1.2 Provider:OpenAI 兼容协议 + 原生 tool-calling 消息(assistant.tool_calls/tool 回填)+ MockProvider
+- [x] M1.3 工具注册表:dispatch_task/query_events/memory_read/memory_write + 零依赖 schema 校验(非法入参回填自纠)
+- [x] M1.4 SupervisorManager 状态机:planning→gate(hitl)→executing→verifying→reflecting→finalizing;自动重试带失败反馈;重规划 rK-sN 轮次隔离;Token 预算/轮次/超时硬边界
+- [x] M1.5 持久化:supervisor_runs/steps 表 + 重启恢复(执行中归 stopped,门禁挂起可续审批)
+- [x] M1.6 REST API:runs CRUD/approve/stop + config(密钥零片段);/api/tasks 拒绝 supervisor 单任务发射
+- [x] M1.7 测试:18 项新增断言(全链路 MockProvider),总计 66 项全绿
+- [x] M1.8 验证:typecheck/build/live 冒烟(未配置显性报错/配置读写/路由回归)
+- [ ] M1.9 真机冒烟:DeepSeek API 真跑一个 hitl run(规划→审批→claude 执行→验收→报告)——**待用户提供 API Key**
+
+### M2:人在环门禁 UI + 编排 Tab(下一轮)
+
+- [ ] M2.1 编排 Tab:目标输入 + 目录选择 + 模式开关(hitl 默认/auto 红框警示)
+- [ ] M2.2 Run 视图:步骤看板(状态贴纸)+ 审批卡(计划展示/可编辑)+ 最终报告(MdBody 渲染)
+- [ ] M2.3 活动流 supervisor 事件展示核验 + 用量账本 Supervisor 分列
+- [ ] M2.4 端到端浏览器实测(发起→审批→派发→报告)
+
+### M3:编排增强(候选)
+
+- [ ] M3.1 dispatch_parallel(并行派发,并发上限)
+- [ ] M3.2 review_output(跨模型交叉评审)
+- [ ] M3.3 read_session(深挖 Worker 会话全文)
+- [ ] M3.4 AnthropicProvider(双协议)
+
 ## 3. 实时活动流:分页 + 筛选
 
 - [x] 3.1 服务端:`events` 查询支持 `beforeSeq` 游标、`kind` 多选、`q` 关键词;返回带 `seq` 与 `hasMore`

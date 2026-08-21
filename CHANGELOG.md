@@ -3,6 +3,26 @@
 > 版本规则与提交规范见 [docs/harness/git.md](docs/harness/git.md)。新版本在上。
 > 早期版本(v0.1 / v0.2)在引入 CHANGELOG 前,按 git log 与 README 简录补记。
 
+## [v0.7.0] - 2026-08-21
+
+定位升级轮:引入 **Supervisor 编排层**——平台自身实现 Agent 循环(设计见 `docs/supervisor-design.md`,对标 clowder-ai 的 CatAgent 原生 Agent 模式)。本版交付后端完整闭环(M1);编排 UI(M2)与并行派发/交叉评审(M3)见 Roadmap。
+
+### 新增
+- **Supervisor Agent 循环**(`packages/server/src/supervisor/`):planning(LLM 结构化规划,可先调 query_events/memory_read 收集背景)→ [人在环] awaiting_approval 门禁 → executing(经 TaskManager 派发 Worker,自动重试带失败反馈)→ verifying(LLM 按 acceptanceCheck 验收;autoCheck 只看任务状态)→ reflecting(重试耗尽决定 replan/abort)→ finalizing(LLM 汇总报告)
+- **LLM Provider 层**:OpenAI 兼容协议(DeepSeek/Qwen/GLM/Kimi/Ollama 通用),原生 tool-calling 消息协议(assistant.tool_calls + tool 回填),SSE 之外的统一超时/错误映射
+- **工具注册表**:dispatch_task / query_events / memory_read / memory_write,零依赖手写入参 schema 校验(非法入参返回 error 回填模型自纠,不 throw);执行状态由边界判定
+- **编排 REST API**:`POST/GET /api/supervisor/runs`、`GET /runs/:id`、`POST /runs/:id/approve`(approve/reject/携带修订计划)、`POST /runs/:id/stop`、`GET/PUT /api/supervisor/config`(密钥零片段)
+- **Supervisor 配置**:Provider/baseUrl/model/apiKey 存 `~/.openharness/supervisor.json`(默认 DeepSeek),密钥不下发任何片段
+- **持久化与恢复**:supervisor_runs / supervisor_steps 两表;服务重启时执行中的 run 归位 stopped,门禁挂起的 run 恢复后可继续审批续跑
+- **事件化**:新增 6 种 EventKind(plan-created/gate-waiting/verify-passed/verify-failed/replan/run-finalized)进统一活动流,agent='supervisor'(指挥官,第五位成员,不占状态卡)
+- **硬边界**(代码层强制):maxSteps 8 / 规划轮次 8 / 单步重试 2 / 重规划 2 / Token 预算 200k / 步骤超时 30min
+
+### 测试
+- MockProvider 脚本化 LLM 全链路单测:hitl 审批/拒绝、auto 模式、验收失败自动重试(带失败反馈)、反思 replan(步骤轮次 rK-sN 隔离)与 abort、Token 预算耗尽、规划失败、执行中 stop(Worker 任务联动打断)、重启恢复(approving 续跑)、工具校验、Provider wire 格式(system 前置/tool_call_id 回填/tool_calls 解析/错误映射)、配置密钥零片段——总计 66 项断言(原 48)
+
+### 验证
+- `pnpm -r typecheck` + `pnpm build` + 66 项测试全绿;live 冒烟:config 读写/未配置显性报错/supervisor 单任务发射拒绝/既有路由回归(agents/sessions/events)正常
+
 ## [v0.3.1] - 2026-08-15
 
 用户反馈闭环第 2 轮(6 条,用户授权全部采用推荐方案),以修复与体验打磨为主。

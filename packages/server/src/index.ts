@@ -19,6 +19,9 @@ import { RoleStore } from './roles.js';
 import { createApp } from './routes.js';
 import { Store } from './store.js';
 import { TaskManager } from './tasks.js';
+import { SupervisorConfigStore } from './supervisor/config.js';
+import { OpenAICompatibleProvider } from './supervisor/provider.js';
+import { SupervisorManager } from './supervisor/manager.js';
 
 const PORT = Number(process.env.OPENHARNESS_PORT ?? 3900);
 const HOST = process.env.OPENHARNESS_HOST ?? '127.0.0.1';
@@ -122,6 +125,22 @@ async function main(): Promise<void> {
   const memory = new MemoryStore();
   conversations = new ConversationManager(store, tasks, (a) => adapters.get(a), roles, memory);
 
+  // Supervisor 编排层:平台自身的 Agent 循环(计划 → 门禁 → 派发 → 验收 → 反思 → 报告)
+  const supervisorConfig = new SupervisorConfigStore();
+  const supervisor = new SupervisorManager({
+    store,
+    createProvider: () => {
+      const cfg = supervisorConfig.resolved();
+      return cfg ? new OpenAICompatibleProvider(cfg) : null;
+    },
+    getAdapter: (a) => adapters.get(a),
+    tasks,
+    memory,
+    roles,
+    emitEvent: pipeline,
+  });
+  supervisor.recover();
+
   // ---- 一次性迁移:重建 codex/cursor 会话索引 ----
   // codex:response_item 记录不含 session_id(payload.id 为条目 ID),旧解析器
   // 导致消息事件散落/缺失、消费完的文件重启后把汇总覆盖为 0;
@@ -201,6 +220,8 @@ async function main(): Promise<void> {
     getAdapter: (a) => adapters.get(a),
     getStatuses: () => statuses,
     enabledAgents,
+    supervisor,
+    supervisorConfig,
   });
 
   // 生产模式:直接托管前端构建产物

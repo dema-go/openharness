@@ -7,7 +7,14 @@ import { execFile } from 'node:child_process';
 import { createNodeWebSocket, type NodeWebSocket } from '@hono/node-ws';
 import { Hono } from 'hono';
 import type { WSContext } from 'hono/ws';
-import type { AgentAdapter, AgentStatus, ConversationStage, HarnessEvent, TaskInfo } from '@openharness/core';
+import type {
+  AgentAdapter,
+  AgentStatus,
+  ConversationStage,
+  HarnessEvent,
+  SupervisorPlan,
+  TaskInfo,
+} from '@openharness/core';
 import { AGENT_DISPLAY, CONVERSATION_STAGE_LABEL, EVENT_KIND_LABEL } from '@openharness/core';
 import { onMessage, type BusMessage } from './bus.js';
 import type { ConversationManager } from './conversations.js';
@@ -19,6 +26,8 @@ import type { Store } from './store.js';
 import { suggest, type Suggestion } from './suggest.js';
 import type { TaskManager } from './tasks.js';
 import { openInTerminal } from './terminal.js';
+import type { SupervisorConfigStore } from './supervisor/config.js';
+import type { SupervisorManager } from './supervisor/manager.js';
 
 export interface AppDeps {
   store: Store;
@@ -31,10 +40,25 @@ export interface AppDeps {
   getAdapter: (agent: TaskInfo['agent']) => AgentAdapter | undefined;
   getStatuses: () => AgentStatus[];
   enabledAgents: Set<TaskInfo['agent']>;
+  supervisor: SupervisorManager;
+  supervisorConfig: SupervisorConfigStore;
 }
 
 export function createApp(deps: AppDeps): { app: Hono; nodeWs: NodeWebSocket } {
-  const { store, tasks, presets, pricing, roles, memory, conversations, getAdapter, getStatuses, enabledAgents } = deps;
+  const {
+    store,
+    tasks,
+    presets,
+    pricing,
+    roles,
+    memory,
+    conversations,
+    getAdapter,
+    getStatuses,
+    enabledAgents,
+    supervisor,
+    supervisorConfig,
+  } = deps;
   const app = new Hono();
   const nodeWs = createNodeWebSocket({ app });
 
@@ -118,6 +142,7 @@ export function createApp(deps: AppDeps): { app: Hono; nodeWs: NodeWebSocket } {
     }>();
     const agent = body.agent as TaskInfo['agent'] | undefined;
     if (!agent || !AGENT_DISPLAY[agent]) return c.json({ error: '未知的 Agent' }, 400);
+    if (agent === 'supervisor') return c.json({ error: 'Supervisor 经 /api/supervisor/runs 编排发起,不支持单任务发射' }, 400);
     if (!enabledAgents.has(agent)) return c.json({ error: `${AGENT_DISPLAY[agent]} 适配器尚未接入` }, 400);
     if (!body.cwd || !body.prompt?.trim()) return c.json({ error: 'cwd 与 prompt 为必填' }, 400);
     if (!existsSync(body.cwd) || !statSync(body.cwd).isDirectory()) {
@@ -334,6 +359,7 @@ export function createApp(deps: AppDeps): { app: Hono; nodeWs: NodeWebSocket } {
     }>();
     const agent = body.agent as TaskInfo['agent'] | undefined;
     if (!agent || !AGENT_DISPLAY[agent]) return c.json({ error: '未知的 Agent' }, 400);
+    if (agent === 'supervisor') return c.json({ error: '对话室暂不支持 Supervisor,请使用编排页' }, 400);
     try {
       const { message, task } = await conversations.send(
         c.req.param('id'),
@@ -357,6 +383,58 @@ export function createApp(deps: AppDeps): { app: Hono; nodeWs: NodeWebSocket } {
   app.delete('/api/conversations/:id', (c) => {
     if (!conversations.delete(c.req.param('id'))) return c.json({ error: '对话不存在' }, 404);
     return c.json({ ok: true });
+  });
+
+  // ---- Supervisor 编排层 ----
+
+  app.get('/api/supervisor/config', (c) => c.json(supervisorConfig.getPublic()));
+
+  app.put('/api/supervisor/config', async (c) => {
+    const body = await c.req.json<{ baseUrl?: string; model?: string; apiKey?: string }>();
+    // 与四 Agent 配置同一约定:apiKey 留空 = 不改;任何密钥片段不回传
+    return c.json(supervisorConfig.update(body));
+  });
+
+  app.get('/api/supervisor/runs', (c) => c.json(supervisor.list(Number(c.req.query('limit') ?? 50))));
+
+  app.get('/api/supervisor/runs/:id', (c) => {
+    const r = supervisor.get(c.req.param('id'));
+    if (!r) return c.json({ error: '编排不存在' }, 404);
+    return c.json(r);
+  });
+
+  app.post('/api/supervisor/runs', async (c) => {
+    const body = await c.req.json<{ goal?: string; cwd?: string; mode?: 'hitl' | 'auto' }>();
+    if (!body.goal?.trim()) return c.json({ error: 'goal 为必填' }, 400);
+    if (!body.cwd?.trim() || !existsSync(body.cwd) || !statSync(body.cwd).isDirectory()) {
+      return c.json({ error: `目录不存在:${body.cwd ?? ''}` }, 400);
+    }
+    const mode = body.mode === 'auto' ? 'auto' : 'hitl';
+    try {
+      const run = await supervisor.start({ goal: body.goal, cwd: body.cwd, mode });
+      return c.json(run, 201);
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : '发起失败' }, 400);
+    }
+  });
+
+  app.post('/api/supervisor/runs/:id/approve', async (c) => {
+    const body = await c.req.json<{ action?: 'approve' | 'reject'; plan?: SupervisorPlan }>();
+    if (body.action !== 'approve' && body.action !== 'reject') {
+      return c.json({ error: 'action 须为 approve 或 reject' }, 400);
+    }
+    try {
+      const run = await supervisor.approve(c.req.param('id'), body.action, body.plan);
+      return c.json(run);
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : '审批失败' }, 400);
+    }
+  });
+
+  app.post('/api/supervisor/runs/:id/stop', async (c) => {
+    const run = await supervisor.stop(c.req.param('id'));
+    if (!run) return c.json({ error: '编排不存在' }, 404);
+    return c.json(run);
   });
 
   // 深链:在新 Terminal 窗口中执行原生工具的恢复命令(仅本机,用户触发)
