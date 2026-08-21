@@ -27,7 +27,10 @@
 - [x] M1.6 REST API:runs CRUD/approve/stop + config(密钥零片段);/api/tasks 拒绝 supervisor 单任务发射
 - [x] M1.7 测试:18 项新增断言(全链路 MockProvider),总计 66 项全绿
 - [x] M1.8 验证:typecheck/build/live 冒烟(未配置显性报错/配置读写/路由回归)
-- [ ] M1.9 真机冒烟:DeepSeek API 真跑一个 hitl run(规划→审批→claude 执行→验收→报告)——**待用户提供 API Key**
+- [x] M1.9 真机冒烟:DeepSeek API 真跑(2026-08-21,两轮)
+  - 正路径(auto 模式):规划 → 派发 claude 只读分析 → LLM 验收 pass → 结构化报告,done;三轮 LLM 共 3790+888 tokens,约 25s
+  - 失败路径(hitl):门禁批准 → claude 遇权限墙(Write 未授权/Bash 重定向被沙箱拦) → autoCheck fail → 自动重试×2(带失败反馈,claude 输出完整根因矩阵) → 反思判断 abort(「根因是环境权限而非方案问题,replan 只会重复撞墙」)——失败处理链路全程按设计工作
+  - 遗留发现:Supervisor 派发默认保守模式,写文件类任务会被 Worker 权限系统拦截;run 级 bypassPermissions 透传开关记入 M2
 
 ### M2:人在环门禁 UI + 编排 Tab(下一轮)
 

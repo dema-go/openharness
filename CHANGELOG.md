@@ -21,7 +21,14 @@
 - MockProvider 脚本化 LLM 全链路单测:hitl 审批/拒绝、auto 模式、验收失败自动重试(带失败反馈)、反思 replan(步骤轮次 rK-sN 隔离)与 abort、Token 预算耗尽、规划失败、执行中 stop(Worker 任务联动打断)、重启恢复(approving 续跑)、工具校验、Provider wire 格式(system 前置/tool_call_id 回填/tool_calls 解析/错误映射)、配置密钥零片段——总计 66 项断言(原 48)
 
 ### 验证
-- `pnpm -r typecheck` + `pnpm build` + 66 项测试全绿;live 冒烟:config 读写/未配置显性报错/supervisor 单任务发射拒绝/既有路由回归(agents/sessions/events)正常
+- `pnpm -r typecheck` + `pnpm build` + 67 项测试全绿;live 冒烟:config 读写/未配置显性报错/supervisor 单任务发射拒绝/既有路由回归(agents/sessions/events)正常
+- **真机冒烟(DeepSeek API,2026-08-21,双路径)**:
+  - 正路径(auto 模式):规划 → 派发 claude 只读分析 core/types.ts → LLM 验收 pass(理由准确引用产出)→ 结构化 Markdown 报告 → done;3 轮 LLM 共 3790 input + 888 output tokens,全程约 25s
+  - 失败路径(hitl 门禁批准后):Worker 遇环境权限墙 → autoCheck 判 fail → 自动重试 ×2(失败反馈注入,Worker 产出完整根因矩阵:Write 未授权/Bash 重定向沙箱拦截/tee/dd/python3/perl/git 全链尝试)→ 反思阶段判断 abort 且理由高质量(「根因是环境权限配置而非方案设计,replan 只会重复撞墙,应交人工解锁」)——验收-重试-反思闭环按设计工作
+  - 修复:stop() 在规划阶段触发导致 run 挂死在门禁(planPhase 返回后未查 stopRequested 即进入 awaiting_approval)→ 补检查点 + 回归测试
+
+### 遗留(记入 M2)
+- Supervisor 派发默认保守权限模式,写文件类任务会被 Worker 权限系统拦截(run 级 bypassPermissions 双层确认开关待 M2 透传)
 
 ## [v0.3.1] - 2026-08-15
 
